@@ -1,0 +1,29 @@
+{% extends 'bootstrap/base.html' %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .galleria{ width: 1800px; height: 1200px; background: #000000}
+</style>
+{%  endblock %}
+
+{% block content %}
+<div class="galleria">
+    <img src="{{url_for('static', filename='photo1.JPG')}}">
+    <img src="{{url_for('static', filename='photo2.JPG')}}">
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{url_for('static', filename='galleria/galleria.min.js')}}"></script>
+<script>
+    (function() {
+        Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');
+        Galleria.run('.galleria',{
+            transition: 'fade',
+            imageCrop: false
+        });
+    }());
+</script>
+{% endblock %}
