@@ -5,7 +5,6 @@ from werkzeug.urls import url_parse
 from app import app, db
 from app.forms import LoginForm, RegistrationForm, PhotoDirectoryForm
 from app.models import User, Photo
-from app.email import send_password_reset_email
 from app.utils import build_image_paths
 import os
 import warnings

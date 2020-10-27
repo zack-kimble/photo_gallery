@@ -1,9 +1,36 @@
 import os
 import torch
 from facenet_pytorch import MTCNN, training
+from facenet_pytorch.models.utils.detect_face import save_img
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from PIL import Image
+
+from app import create_app
+from flask import current_app
+
+from app.models import PhotoFace, Task
+from app import db
+
+from rq import get_current_job
+
+
+#Making dataset return image and path instead of image and label. Probably better to just stop using Dataset and Dataloader at some point, but whatever
+class ImagePathsDataset(Dataset):
+    def __init__(self, data, loader, transform):
+        self.data = data
+        self.loader = loader
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        orig_path = self.data[idx]
+        img = self.loader(orig_path)
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, orig_path
 
 def exif_rotate_pil_loader(path):
     with open(path, 'rb') as f:
@@ -36,23 +63,6 @@ def reorient_image(im):
     except (KeyError, AttributeError, TypeError, IndexError):
         return im
 
-#Making dataset return image and path instead of image and label. Probably better to just stop using Dataset and Dataloader at some point, but whatever
-
-class ImagePathsDataset(Dataset):
-    def __init__(self, data, loader, transform):
-        self.data = data
-        self.loader = loader
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        orig_path = self.data[idx]
-        img = self.loader(orig_path)
-        if self.transform is not None:
-            img = self.transform(img)
-        return img, orig_path
 
 def mtcnn_detect_faces(images):
 
@@ -82,9 +92,9 @@ def mtcnn_detect_faces(images):
         collate_fn=training.collate_pil
     )
 
+    paths = []
     boxes = []
     box_probs = []
-    paths = []
     faces = []
 
     for i, (x, b_paths) in enumerate(loader):
@@ -98,14 +108,49 @@ def mtcnn_detect_faces(images):
         paths.extend(b_paths)
         faces.extend(faces)
 
-    return boxes, box_probs, paths, faces
-
-def store_faces(boxes, box_probs, paths, faces, storage_root):
-
-    def store_face():
-        face = PhotoFaces()
-
-    for box, prob, path, faces in zip(boxes, box_probs, paths, faces):
-        if len(prob)>1:
+    return paths, boxes, box_probs, faces
 
 
+def faces_to_db(face_metas, storage_root):
+    face = PhotoFace
+
+def store_face(face,save_path):
+    os.makedirs(os.path.dirname(save_path) + "/", exist_ok=True)
+    save_img(face, save_path)
+
+def detect_faces_task(images_list, storage_root):
+    try:
+        paths_list, boxes_list, box_probs_list, faces_list = mtcnn_detect_faces(images_list)
+        face_meta_list = []
+        for path, boxes, probs, faces in zip(paths_list, boxes_list, box_probs_list, faces_list):
+            if len(probs)>1:
+                image_path, ext = os.path.splitext(path)
+                for i, box, prob, face in enumerate(zip(boxes, probs, faces)):
+                    save_path = storage_root + image_path + '_' + str(i) + ext
+                    db_face = PhotoFace(location=save_path,
+                                     sequence=i,
+                                     bb_x1=box[0],
+                                    bb_y1 = box[1],
+                                    bb_x2 = box[2],
+                                    bb_y2 = box[3],
+                                    bb_prob = prob
+                                    )
+                    db.session.add(db_face)
+                    store_face(face, save_path)
+
+        db.session.commit()
+    except:
+        app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+    finally:
+        _set_task_progress(100)
+
+def _set_task_progress(progress):
+    job = get_current_job()
+    if job:
+        job.meta['progress'] = progress
+        job.save_meta()
+        task = Task.query.get(job.get_id())
+        task.progress = progress
+        if progress >= 100:
+            task.complete = True
+        db.session.commit()
