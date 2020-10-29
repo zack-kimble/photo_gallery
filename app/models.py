@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import redis
 import rq
-from app import app, db, login
+from app import db, login
 #from app.search import add_to_index, remove_from_index, query_index
 
 
@@ -36,7 +36,12 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
     def launch_task(self, name, description, *args, **kwargs):
-        rq_job = current_app.task_queue.enqueue('app.tasks.' + name, self.id,
+        print(name,description)
+        print(*args)
+        for k,v in kwargs.items():
+            print(k,':',v)
+
+        rq_job = current_app.task_queue.enqueue('app.tasks.' + name,
                                                 *args, **kwargs)
         task = Task(id=rq_job.get_id(), name=name, description=description,
                     user=self)
@@ -95,9 +100,9 @@ def load_user(id):
 
 class Photo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    location = db.Column(db.String, unique=True)
+    location = db.Column(db.String, unique=True, index=True)
     photo_metadata = db.relationship('PhotoMetadata')
-    photo_faces = db.relationship('PhotoFaces')
+    photo_faces = db.relationship('PhotoFace')
 
 class PhotoMetadata(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -107,16 +112,16 @@ class PhotoMetadata(db.Model):
     value = db.Column(db.String, index=True)
 
 class PhotoFace(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    location = db.Column(db.Integer, unique = True)
-    sequence = db.Column(db.Integer)
-    bb_x1 = db.Column(db.NUMERIC)
-    bb_y1 = db.Column(db.NUMERIC)
-    bb_x2 = db.Column(db.NUMERIC)
-    bb_y2 = db.Column(db.NUMERIC)
-    bb_prob = db.column(db.NUMERIC)
+    id = db.Column(db.Integer, primary_key=True)
+    location = db.Column(db.Integer, unique=True, nullable=False)
+    sequence = db.Column(db.Integer, nullable=False)
+    bb_x1 = db.Column(db.NUMERIC, nullable=False)
+    bb_y1 = db.Column(db.NUMERIC, nullable=False)
+    bb_x2 = db.Column(db.NUMERIC, nullable=False)
+    bb_y2 = db.Column(db.NUMERIC, nullable=False)
+    bb_prob = db.Column(db.NUMERIC, nullable=False)
     photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'))
-    photo = db.relationship("Photo", back_populates='photo_metadata')
+    photo = db.relationship("Photo", back_populates='photo_faces')
 
 
 class Task(db.Model):
