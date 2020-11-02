@@ -13,4 +13,4 @@ class Config(object):
     #TODO Need better way to handle this. RQ doesn't get env from .flaskenv, so probably need to control env elsewhere
     UPLOAD_FOLDER = '/home/zack/PycharmProjects/photo_gallery/uploads'
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://'
-    SQLALCHEMY_ECHO = True
+    #SQLALCHEMY_ECHO = True

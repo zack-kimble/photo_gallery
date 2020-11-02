@@ -1,0 +1,93 @@
+{% extends 'bootstrap/base.html' %}
+{% block content %}
+    <nav aria-label="...">
+        <ul class="pager">
+            <li class="previous{% if not prev_url %} disabled{% endif %}">
+                <a href="{{ prev_url or '#' }}">
+                    <span aria-hidden="true">&larr;</span> Next photo
+                </a>
+            </li>
+            <li class="next{% if not next_url %} disabled{% endif %}">
+                <a href="{{ next_url or '#' }}">
+                    Previous photo <span aria-hidden="true">&rarr;</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <script src="https://unpkg.com/konva@7.0.3/konva.min.js"></script>
+    <div id="stage">
+        <!-- canvas here -->
+        <!-- <canvas id="canvas" style="width:100%; height:80%; margin: 0; padding: 0;"></canvas> -->
+    </div>
+    <script>
+        var imageObj = new Image();
+        imageObj.src = '{{url_for('static', filename='photo1.JPG')}}';
+
+        var window_width = window.innerWidth;
+        var window_height = window.innerHeight;
+
+
+
+
+        imageObj.onload = function () {
+            var image_height = imageObj.naturalHeight;
+            var image_width  = imageObj.naturalWidth;
+            if ((window_height/window_width) < (image_height/image_width)){
+            var height = window_height
+            var width = (window_height/image_height) * image_width
+                } else {
+            var height = (window_width/image_width) * image_height
+            var width  = window_width
+                 }
+            var img = new Konva.Image({
+                x: 0,
+                y: 0,
+                image: imageObj,
+                width: width,
+                height: height,
+            });
+
+            // add the shape to the layer
+            img_layer.add(img);
+            img_layer.batchDraw()
+        };
+
+
+
+        var stage = new Konva.Stage({
+            container: 'stage',   // id of container <div>
+            width: window_width,
+            height: window_height
+        });
+
+        var img_layer = new Konva.Layer();
+        var shapes_layer = new Konva.Layer();
+
+
+        var circle = new Konva.Circle({
+            x: stage.width() / 2,
+            y: stage.height() / 2,
+            radius: 70,
+            fill: 'transparent',
+            stroke: 'red',
+            strokeWidth: 4
+        });
+
+        // add the shape to the layer
+        shapes_layer.add(circle);
+
+        // add the layer to the stage
+        stage.add(img_layer);
+        stage.add(shapes_layer);
+
+        // draw the image
+        //img_layer.draw();
+        shapes_layer.draw();
+    </script>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="https://unpkg.com/konva@7.0.3/konva.min.js"></script>
+
+{% endblock %}

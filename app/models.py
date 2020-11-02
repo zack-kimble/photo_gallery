@@ -38,8 +38,8 @@ class User(UserMixin, db.Model):
     def launch_task(self, name, description, *args, **kwargs):
         print(name,description)
         print(*args)
-        for k,v in kwargs.items():
-            print(k,':',v)
+        # for k,v in kwargs.items():
+        #     print(k,':',v)
 
         rq_job = current_app.task_queue.enqueue('app.tasks.' + name,
                                                 *args, **kwargs)
@@ -122,6 +122,9 @@ class PhotoFace(db.Model):
     bb_prob = db.Column(db.NUMERIC, nullable=False)
     photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'))
     photo = db.relationship("Photo", back_populates='photo_faces')
+    bb_auto = db.Column(db.BOOLEAN)
+    name = db.Column(db.VARCHAR)
+    name_auto = db.Column(db.BOOLEAN)
 
 
 class Task(db.Model):

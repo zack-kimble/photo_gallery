@@ -1,0 +1,7 @@
+for file in $(ls *.jpg)
+do	
+	for i in {1..80}
+	do
+		cp $file $i$file
+	done
+done

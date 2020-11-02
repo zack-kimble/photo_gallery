@@ -158,8 +158,8 @@ def detect_faces_task(storage_root):
                                 photo_id=photo_id
                                 )
                 db.session.add(db_face)
-                db.session.commit()
                 store_face(face, save_path)
+        db.session.commit()
 
 
     except:
