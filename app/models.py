@@ -9,7 +9,30 @@ import jwt
 import redis
 import rq
 from app import db, login
-#from app.search import add_to_index, remove_from_index, query_index
+# from app.search import add_to_index, remove_from_index, query_index
+from sqlalchemy import types
+import numpy as np
+import io
+
+
+class ArrayType(types.TypeDecorator):
+    impl = types.BLOB
+
+    # def __repr__(self):
+    #     return self.impl.__repr__()
+
+    def process_bind_param(self, value, dialect):
+        out = io.BytesIO()
+        np.save(out, value)
+        out.seek(0)
+        return out.read()
+
+    def process_result_value(self, value, dialect):
+        out = io.BytesIO(value)
+        out.seek(0)
+        return np.load(out)
+
+
 
 
 followers = db.Table(
@@ -17,6 +40,7 @@ followers = db.Table(
     db.Column('follower_id', db.Integer, db.ForeignKey('user.id')),
     db.Column('followed_id', db.Integer, db.ForeignKey('user.id'))
 )
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,7 +60,7 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
     def launch_task(self, name, description, *args, **kwargs):
-        print(name,description)
+        print(name, description)
         print(*args)
         # for k,v in kwargs.items():
         #     print(k,':',v)
@@ -55,9 +79,11 @@ class User(UserMixin, db.Model):
         return Task.query.filter_by(name=name, user=self,
                                     complete=False).first()
 
+
 @login.user_loader
 def load_user(id):
     return User.query.get(int(id))
+
 
 # class SearchableMixin(object):
 #     @classmethod
@@ -104,12 +130,14 @@ class Photo(db.Model):
     photo_metadata = db.relationship('PhotoMetadata')
     photo_faces = db.relationship('PhotoFace')
 
+
 class PhotoMetadata(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'))
     photo = db.relationship("Photo", back_populates='photo_metadata')
     key = db.Column(db.String, index=True)
     value = db.Column(db.String, index=True)
+
 
 class PhotoFace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -125,6 +153,18 @@ class PhotoFace(db.Model):
     bb_auto = db.Column(db.BOOLEAN)
     name = db.Column(db.VARCHAR)
     name_auto = db.Column(db.BOOLEAN)
+    embedding = db.relationship('FaceEmbedding')
+
+    def from_dict(self, data):
+        for field in data:
+            setattr(self, field, data[field])
+
+
+class FaceEmbedding(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    # embedding = db.Column(db.JSON)
+    embedding = db.Column(ArrayType)
+    photo_face_id = db.Column(db.Integer, db.ForeignKey('photo_face.id'))
 
 
 class Task(db.Model):
@@ -145,6 +185,3 @@ class Task(db.Model):
     def get_progress(self):
         job = self.get_rq_job()
         return job.meta.get('progress', 0) if job is not None else 100
-
-    
-

@@ -4,40 +4,44 @@
         <ul class="pager">
             <li class="previous{% if not prev_url %} disabled{% endif %}">
                 <a href="{{ prev_url or '#' }}">
-                    <span aria-hidden="true">&larr;</span> Next photo
+                    <span aria-hidden="true">&larr;</span> Previous photo
                 </a>
             </li>
             <li class="next{% if not next_url %} disabled{% endif %}">
                 <a href="{{ next_url or '#' }}">
-                    Previous photo <span aria-hidden="true">&rarr;</span>
+                    Next photo <span aria-hidden="true">&rarr;</span>
                 </a>
             </li>
         </ul>
     </nav>
     <script src="https://unpkg.com/konva@7.0.3/konva.min.js"></script>
-    <div id="stage">
+    <div id="stage", data="{{ photo.location }}">
         <!-- canvas here -->
         <!-- <canvas id="canvas" style="width:100%; height:80%; margin: 0; padding: 0;"></canvas> -->
     </div>
     <script>
         var imageObj = new Image();
-        imageObj.src = '{{url_for('static', filename='photo1.JPG')}}';
-
-        var window_width = window.innerWidth;
-        var window_height = window.innerHeight;
+        imageObj.src = '{{url_for('main.photos', filename=photo.location)}}';
 
 
+        //var window_width = window.innerWidth;
+        //var window_height = window.innerHeight;
+        var avail_height = window.screen.availHeight
+        var avail_width = window.screen.availWidth;
 
+        var faces = {{ face_json|safe }}
 
+        //let img
+        //let stage
         imageObj.onload = function () {
             var image_height = imageObj.naturalHeight;
             var image_width  = imageObj.naturalWidth;
-            if ((window_height/window_width) < (image_height/image_width)){
-            var height = window_height
-            var width = (window_height/image_height) * image_width
+            if ((avail_height/avail_width) < (image_height/image_width)){
+            var height = avail_height
+            var width = (avail_height/image_height) * image_width
                 } else {
-            var height = (window_width/image_width) * image_height
-            var width  = window_width
+            var height = (avail_width/image_width) * image_height
+            var width  = avail_width
                  }
             var img = new Konva.Image({
                 x: 0,
@@ -47,42 +51,124 @@
                 height: height,
             });
 
-            // add the shape to the layer
+            var x_scale = width/1024 //images are resized to 1024 x 1024 by MTCNN, so that's the scale bounding boxes are in
+            var y_scale = height/1024
+
+            var stage = new Konva.Stage({
+            container: 'stage',   // id of container <div>
+            width: width,
+            height: height})
+
+            var img_layer = new Konva.Layer();
             img_layer.add(img);
             img_layer.batchDraw()
-        };
+
+            var shapes_layer = new Konva.Layer();
+            var text_layer = new Konva.Layer();
+
+            for (face of faces) {
+                // Bounding box for faces
+                var face_box = new Konva.Rect({
+                    x: face.bb_x1 * x_scale,
+                    y: face.bb_y1 * y_scale,
+                    width: (face.bb_x2 - face.bb_x1) * x_scale,
+                    height: (face.bb_y2 - face.bb_y1) * y_scale,
+                    fill: 'transparent',
+                    stroke: 'red',
+                    strokeWidth: 4,
+                    id: 'box_'+face.id
+                });
+                shapes_layer.add(face_box);
+                //floating label for face
+                var textNode = new Konva.Text({
+                    text: face.name,
+                    x: face_box.getAttr('x')+ 10,
+                    y: face_box.getAttr('y')+ 10,
+                    fontSize: 20,
+                    fill: 'red',
+                    id: 'box_'+face.id
+                });
+                $(textNode).data('photo_face_id', face.id)
+                text_layer.add(textNode);
+                text_layer.draw()
+
+                textNode.on('dblclick', (evt) => {
+                    // create textarea over canvas with absolute position
+
+                    // first we need to find position for textarea
+                    // how to find it?
+
+                    // at first lets find position of text node relative to the stage:
+                    var textPosition = evt.currentTarget.getAbsolutePosition();
+
+                    // then lets find position of stage container on the page:
+                    var stageBox = stage.container().getBoundingClientRect();
+
+                    // so position of textarea will be the sum of positions above:
+                    var areaPosition = {
+                        x: stageBox.left + textPosition.x,
+                        y: stageBox.top + textPosition.y,
+                    };
+
+                    // create textarea and style it
+                    var textarea = document.createElement('textarea');
+                    document.body.appendChild(textarea);
+
+                    textarea.value = evt.currentTarget.text();
+                    textarea.style.position = 'absolute';
+                    textarea.style.top = areaPosition.y + 'px';
+                    textarea.style.left = areaPosition.x + 'px';
+                    textarea.style.width = evt.currentTarget.width();
+
+                    textarea.focus();
+
+                    textarea.addEventListener('keydown', function (e) {
+                        // hide on enter
+                        if (e.keyCode === 13) {
+                            evt.currentTarget.text(textarea.value);
+                            $.ajax({
+                                url:'photo_face/' +$(evt.currentTarget).data('photo_face_id'),
+                                method: 'PUT',
+                                data:JSON.stringify({
+                                    name: textarea.value,
+                                    name_auto: false
+                                }),
+                                contentType: 'application/json',
+                                processData: false
+                            })
+
+                            text_layer.draw();
+                            document.body.removeChild(textarea);
+                        }
+                    });
+                });
+            }
+
+            {#            var face_box = new Konva.Rect({
+                            x: faces[0].bb_x1 * x_scale,
+                            y: faces[0].bb_y1 * y_scale,
+                            width: (faces[0].bb_x2-faces[0].bb_x1) * x_scale,
+                            height: (faces[0].bb_y2-faces[0].bb_y1) * y_scale,
+                            fill: 'transparent',
+                            stroke: 'red',
+                            strokeWidth: 4,
+                        });
+
+                        // add the shape to the layer
+                        shapes_layer.add(face_box);#}
+
+                        // add the layer to the stage
+                        stage.add(img_layer);
+                        stage.add(shapes_layer);
+                        stage.add(text_layer);
+
+                        // draw the image
+                        //img_layer.draw();
+                        shapes_layer.draw();
+                        };
 
 
 
-        var stage = new Konva.Stage({
-            container: 'stage',   // id of container <div>
-            width: window_width,
-            height: window_height
-        });
-
-        var img_layer = new Konva.Layer();
-        var shapes_layer = new Konva.Layer();
-
-
-        var circle = new Konva.Circle({
-            x: stage.width() / 2,
-            y: stage.height() / 2,
-            radius: 70,
-            fill: 'transparent',
-            stroke: 'red',
-            strokeWidth: 4
-        });
-
-        // add the shape to the layer
-        shapes_layer.add(circle);
-
-        // add the layer to the stage
-        stage.add(img_layer);
-        stage.add(shapes_layer);
-
-        // draw the image
-        //img_layer.draw();
-        shapes_layer.draw();
     </script>
 {% endblock %}
 
