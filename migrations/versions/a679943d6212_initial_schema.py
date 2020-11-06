@@ -1,8 +1,8 @@
-"""setupt
+"""initial schema
 
-Revision ID: f056c4f9f4b3
+Revision ID: a679943d6212
 Revises: 
-Create Date: 2020-11-04 11:20:22.611240
+Create Date: 2020-11-05 13:22:37.896624
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import app.models
 
 
 # revision identifiers, used by Alembic.
-revision = 'f056c4f9f4b3'
+revision = 'a679943d6212'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -83,7 +83,8 @@ def upgrade():
     sa.Column('embedding', app.models.ArrayType(), nullable=True),
     sa.Column('photo_face_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['photo_face_id'], ['photo_face.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('photo_face_id')
     )
     # ### end Alembic commands ###
 

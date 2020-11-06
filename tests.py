@@ -117,3 +117,7 @@ def test_create_faces_route(testapp, login, init_database):
 def test_create_embeddings_task(client, init_database, populate_test_photos):
     create_embeddings_task()
     assert PhotoFace.query.first().embedding is not None
+
+def test_identify_faces_task(client, init_database, populate_test_photos):
+    detect_faces_task()
+    assert PhotoFace.query.first().name is not None

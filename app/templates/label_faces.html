@@ -88,6 +88,10 @@
                     fill: 'red',
                     id: 'box_'+face.id
                 });
+                //alert(face.name_auto)
+                if(face.name_auto=='True'){
+                    textNode.setAttr('fill','green')}
+
                 $(textNode).data('photo_face_id', face.id)
                 text_layer.add(textNode);
                 text_layer.draw()

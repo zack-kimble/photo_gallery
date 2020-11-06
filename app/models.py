@@ -164,7 +164,7 @@ class FaceEmbedding(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # embedding = db.Column(db.JSON)
     embedding = db.Column(ArrayType)
-    photo_face_id = db.Column(db.Integer, db.ForeignKey('photo_face.id'))
+    photo_face_id = db.Column(db.Integer, db.ForeignKey('photo_face.id'), unique=True)
 
 
 class Task(db.Model):

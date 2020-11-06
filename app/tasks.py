@@ -14,6 +14,10 @@ from app import create_app, Config
 from app import db
 from app.models import Photo, PhotoFace, Task, FaceEmbedding
 
+import numpy as np
+
+from sklearn.neighbors import RadiusNeighborsClassifier
+
 
 class TestConfig(Config):
     TESTING = True
@@ -171,7 +175,13 @@ def detect_faces_task(storage_root):
     # TODO Not sure about the try/except wrapping here.
     try:
         # get image data from db
-        photos_result = Photo.query.all()  # replace with query based on something from request
+        photos_result = Photo.query.filter(~Photo.photo_faces.any()).all() # replace with query based on something from request. This will also run pictures with no faces everytime I think. Need to think about how to save photos with no faces so they don't get rerun
+        if (new_photo_count := len(photos_result)) == 0:
+            app.logger.warn('no new photos found to run detection on',exc_info = sys.exc_info())
+            _set_task_progress(100)
+            return
+
+        app.logger.info(f'detecting faces in {new_photo_count} photos')
         photo_id_list, photo_paths_list = list(zip(*[(photo.id, photo.location) for photo in photos_result]))
 
         # get paths figured out - doing this here instead of in the mtcnn wrapper. Should be fine since the dataloader is sequential
@@ -224,7 +234,11 @@ def _set_task_progress(progress):
 
 def create_embeddings_task():
     try:
-        faces_result = PhotoFace.query.all()
+        faces_result = PhotoFace.query.filter(~PhotoFace.embedding.any()).all()
+        if len(faces_result) == 0:
+            app.logger.warn('no new faces found to run embedding on',exc_info = sys.exc_info())
+            _set_task_progress(100)
+            return
         face_id_list, face_paths_list = list(zip(*[(face.id, face.location) for face in faces_result]))
         face_embeddings = get_arcface_embeddings(face_paths_list)
         for id, embedding in zip(face_id_list, face_embeddings):
@@ -236,3 +250,40 @@ def create_embeddings_task():
         raise ChildProcessError
     finally:
         _set_task_progress(100)
+
+
+def angular_distance(feature0, feature1):
+    x0 = feature0 / np.linalg.norm(feature0)
+    x1 = feature1 / np.linalg.norm(feature1)
+    cosine = np.dot(x0,x1)
+    cosine = np.clip(cosine, -1.0, 1.0)
+    theta = np.arccos(cosine)
+    theta = theta * 180 / np.pi
+    return theta
+
+
+def identify_faces_task():
+    #try:
+        gallery =  PhotoFace.query.filter(PhotoFace.name_auto.is_(False)& PhotoFace.embedding.any()).all()
+        X, y = zip(*[(photo_face.embedding[0].embedding, photo_face.name) for photo_face in gallery])
+        #TODO convert names to ints and map then map back after
+        y = np.array(y).astype('<U20') #hack because RadiusNeighborsClassifier converts y levels to np.array and then compares dtypes. If the outlier label is longer than any name it will fail.
+        radius_knn = RadiusNeighborsClassifier(radius=73, metric=angular_distance, outlier_label='Unknown', weights='distance')
+        radius_knn.fit(X, y)
+        
+        # will redo any previously autolabeled faces
+        probes = PhotoFace.query.filter(PhotoFace.name_auto.isnot(False) & PhotoFace.embedding.any()).all() 
+        X_test, probe_ids = zip(*[(photo_face.embedding[0].embedding, photo_face.id) for photo_face in probes])
+        predict_names = radius_knn.predict(X_test)
+        for id, name in zip(probe_ids, predict_names):
+            photo_face = PhotoFace.query.get(id)
+            photo_face.from_dict({'name': name, 'name_auto': True})
+        db.session.commit()
+    # except:
+    #     app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+    #     raise ChildProcessError
+    # finally:
+    #     _set_task_progress(100)
+
+if __name__ == '__main__':
+    identify_faces_task()

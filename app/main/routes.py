@@ -123,6 +123,7 @@ def label_faces():
         if photos.has_prev else None
     face_dictionaries =[]
     #convert the information stored in photo_faces into json friendly dictionaries
+    #TODO: figure out better way of preparing for serialization. This fixes numbers but causes booleans become 'True'
     for face in photo.photo_faces:
         face_dictionary = {}
         for column in face.__table__.columns:
