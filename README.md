@@ -4,7 +4,7 @@
 ### Description
 A flask app that provides state of the art computer vision capabilities combined with a slideshow.
 
-Currently work in progress. 
+Currently work in progress. Uses Flask backend with SLQAlchemy over Sqlite3. 
 
 ### Capabilities
   * Work from local files
@@ -21,3 +21,10 @@ Currently work in progress.
   * Add object recognition and search
   * Add scene recogntiion and search 
   
+### Acknolwedgments and citations
+Backend is modeled heavily on Miguel Grinberg's Flask Megatutorial: https://github.com/miguelgrinberg/microblog
+
+Front end combines bootstrap, konvas.js and galleria.js
+
+Imports the facenet-pytorch implementation of MTCNN: https://github.com/timesler/facenet-pytorch
+Pretrained Arcface model is extracted from https://github.com/foamliu/InsightFace-v2
