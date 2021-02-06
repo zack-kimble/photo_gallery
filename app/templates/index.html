@@ -7,4 +7,14 @@
     {{ wtf.quick_form(path_form) }}
     <br>
     {% endif %}
+
+    {% if create_search_form %}
+        {{ wtf.quick_form(create_search_form) }}
+    <br>
+    {% endif %}
+
+    {% if load_search_form %}
+        {{ wtf.quick_form(load_search_form) }}
+    <br>
+    {% endif %}
 {% endblock %}

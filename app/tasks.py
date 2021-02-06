@@ -33,6 +33,8 @@ else:
     app = create_app()
     app.app_context().push()
 
+print("after context push:"+os.getcwd())
+#def run_search
 
 # Making dataset return image and path instead of image and label. Probably better to just stop using Dataset and Dataloader at some point, but whatever
 class ImagePathsDataset(Dataset):
@@ -131,6 +133,7 @@ def mtcnn_detect_faces(images):
 
 
 def get_arcface_embeddings(images):
+    print("arc face func: "+os.getcwd())
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print('Running on device: {}'.format(device))
     batch_size = 16
@@ -145,7 +148,7 @@ def get_arcface_embeddings(images):
     loader = DataLoader(img_ds, num_workers=workers,
                         batch_size=batch_size)
 
-    from app.insightface import model_loader
+    from app.insightface import model_loader #, models
 
     model = model_loader()
     model = model.to(device)
@@ -233,7 +236,8 @@ def _set_task_progress(progress):
 
 
 def create_embeddings_task():
-    try:
+        print("embeddings taask: "+os.getcwd())
+    #try:
         faces_result = PhotoFace.query.filter(~PhotoFace.embedding.any()).all()
         if len(faces_result) == 0:
             app.logger.warn('no new faces found to run embedding on',exc_info = sys.exc_info())
@@ -245,11 +249,11 @@ def create_embeddings_task():
             face_embedding = FaceEmbedding(embedding=embedding, photo_face_id=id)
             db.session.add(face_embedding)
         db.session.commit()
-    except:
-        app.logger.error('Unhandled exception', exc_info=sys.exc_info())
-        raise ChildProcessError
-    finally:
-        _set_task_progress(100)
+    # except:
+    #     app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+    #     raise ChildProcessError
+    # finally:
+    #     _set_task_progress(100)
 
 
 def angular_distance(feature0, feature1):
@@ -286,4 +290,4 @@ def identify_faces_task():
     #     _set_task_progress(100)
 
 if __name__ == '__main__':
-    identify_faces_task()
+    create_embeddings_task()

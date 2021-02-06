@@ -3,14 +3,15 @@ from flask import render_template, flash, redirect, url_for, request,  send_from
 from flask import current_app as app
 from flask_login import current_user, login_required
 from app import db
-from app.main.forms import PhotoDirectoryForm
-from app.models import User, Photo, PhotoFace
+from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm
+from app.models import User, Photo, PhotoFace, SavedSearch
 from app.utils import build_image_paths
 from app.main import bp
 
 import os
 import warnings
 import json
+
 
 @bp.route('/manage')
 def manage():
@@ -26,9 +27,16 @@ def manage():
 @bp.route('/', methods=['GET', 'POST'])
 @bp.route('/index', methods=['GET', 'POST'])
 def index():
-    session['made_up_test'] = 1
+
     path_form = PhotoDirectoryForm()
-    if path_form.validate_on_submit():
+    create_search_form = CreateSearchForm()
+    search_name_list = db.session.query(SavedSearch.id, SavedSearch.name).all()
+    load_search_form = LoadSearchForm()
+    load_search_form.search_name.choices = search_name_list
+    load_search_form_submitted = (load_search_form.slideshow.data or load_search_form.browse.data or
+                                  load_search_form.label_faces.data or load_search_form.delete.data)
+
+    if path_form.submit.data and path_form.validate():
         full_path = path_form.path.data
         upload_folder = app.config['UPLOAD_FOLDER']
         try:
@@ -42,7 +50,57 @@ def index():
         db.session.commit()
         flash('Photos added!')
         return redirect(url_for('main.index'))
-    return render_template('index.html', path_form=path_form)
+    elif create_search_form.create.data and create_search_form.validate():
+        #run_now = create_search_form.run_now.data
+        name = create_search_form.name.data
+        if create_search_form.search_by_people.data:
+            people = create_search_form.people.data
+        else:
+            people = None
+        search = SavedSearch(name=name, people=people)
+        db.session.add(search)
+        db.session.commit()
+        flash('Search saved')
+        return redirect(url_for('main.index'))
+        # if run_now:
+        #     if current_user.get_task_in_progress('search_task'):
+        #         flash('Search task is currently in progress')
+        #     else:
+        #         current_user.launch_task('identify_faces_task', 'Identify faces...', name, people, save=True)
+        #         db.session.commit()
+        #         search_task(search_id)
+        #         flash('Search is running. Results will be cached.')
+        # else:
+
+    elif load_search_form_submitted and load_search_form.validate():
+        selected_search = load_search_form.search_name.data
+        if load_search_form.delete.data:
+            SavedSearch.query.filter_by(id=selected_search).delete()
+            db.session.commit()
+            flash('search deleted')
+            return redirect(url_for('main.index'))
+        else:
+            if load_search_form.use_cache.data:
+                search_results = SearchResult.get(selected_search)
+            else:
+                search_results = run_search(SavedSearch.get(selected_search))
+            if load_search_form.slideshow.data:
+                return redirect(url_for('main.slideshow', search_results=search_results))
+            elif load_search_form.browse.data:
+                pass
+                #return redirect(url_for('main.browse', search_results=search_results))
+            elif load_search_form.label_faces.data:
+                return redirect(url_for('main.label_faces', search_results=search_results))
+
+
+    return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form)
+
+from boolean_parser import parse
+def run_search(saved_search):
+    saved_search.people
+    Photo.query.join(Photo.photo_faces, aliased=False).filter(
+        or_(PhotoFace.name.in_(['Zack', 'Erin']), PhotoFace.name.in_(['Z', 'e']))).count()
+
 
 @bp.route('/photos/<path:filename>')
 @login_required
