@@ -148,7 +148,7 @@ def get_arcface_embeddings(images):
     loader = DataLoader(img_ds, num_workers=workers,
                         batch_size=batch_size)
 
-    from app.insightface import model_loader #, models
+    from app.insightface import model_loader #TODO figure out how to change where torch looks for model module when loading. Currently looks in the task cwd, which is the project root.
 
     model = model_loader()
     model = model.to(device)

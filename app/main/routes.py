@@ -4,14 +4,16 @@ from flask import current_app as app
 from flask_login import current_user, login_required
 from app import db
 from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm
-from app.models import User, Photo, PhotoFace, SavedSearch
+from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults
 from app.utils import build_image_paths
 from app.main import bp
+from sqlalchemy import and_, or_, not_, text
 
 import os
 import warnings
 import json
-
+import boolean
+import random
 
 @bp.route('/manage')
 def manage():
@@ -73,33 +75,63 @@ def index():
         # else:
 
     elif load_search_form_submitted and load_search_form.validate():
-        selected_search = load_search_form.search_name.data
+        selected_search_id = load_search_form.search_name.data
+        ordering = load_search_form.ordering.data
+        #delete button
         if load_search_form.delete.data:
-            SavedSearch.query.filter_by(id=selected_search).delete()
+            SavedSearch.query.filter_by(id=selected_search_id).delete()
             db.session.commit()
             flash('search deleted')
             return redirect(url_for('main.index'))
+        #all other buttons
         else:
-            if load_search_form.use_cache.data:
-                search_results = SearchResult.get(selected_search)
-            else:
-                search_results = run_search(SavedSearch.get(selected_search))
+            if not(SearchResults.query.filter_by(search_id=selected_search_id).first() and load_search_form.use_cache.data):
+                execute_search(selected_search_id, ordering=ordering)
+
             if load_search_form.slideshow.data:
-                return redirect(url_for('main.slideshow', search_results=search_results))
+                return redirect(url_for('main.slideshow', search_id=selected_search_id))
             elif load_search_form.browse.data:
                 pass
                 #return redirect(url_for('main.browse', search_results=search_results))
             elif load_search_form.label_faces.data:
-                return redirect(url_for('main.label_faces', search_results=search_results))
+                return redirect(url_for('main.label_faces', search_id=selected_search_id))
 
 
     return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form)
 
-from boolean_parser import parse
-def run_search(saved_search):
-    saved_search.people
-    Photo.query.join(Photo.photo_faces, aliased=False).filter(
-        or_(PhotoFace.name.in_(['Zack', 'Erin']), PhotoFace.name.in_(['Z', 'e']))).count()
+def parse_names(input):
+    input = input.replace(', ', ' and ')
+    algebra = boolean.BooleanAlgebra()
+    expression = algebra.parse(input).simplify()
+    return expression
+
+def boolean_algebra_to_slqalchemy(expression,  child_object, child_table_column):
+    '''A bit ugly, converts boolean expression to a sqla BooleanClauseList where each symbol is replaced with .any(child_table_column=symbol)'''
+    #TODO: either make this more generic and/or make into a method for Photo
+    operator_map = {'AND': and_, 'OR': or_, 'NOT': not_}
+    func_for_map = lambda x: boolean_algebra_to_slqalchemy(x, child_object=child_object, child_table_column=child_table_column)
+    if isinstance(expression, boolean.boolean.Symbol):
+        obj = expression.obj if isinstance(expression.obj, str) else repr(expression.obj)
+        return child_object.any(child_table_column == obj)
+    else:
+        return operator_map[expression.__class__.__name__](*map(func_for_map, expression.args))
+
+def execute_search(saved_search_id, ordering):
+    saved_search = SavedSearch.query.get(saved_search_id)
+    expression = parse_names(saved_search.people)
+    search_filter = boolean_algebra_to_slqalchemy(expression, child_object=Photo.photo_faces, child_table_column=PhotoFace.name)
+    #TODO: support something other than random order.
+    search_query = Photo.query.with_entities(f"'{saved_search.id}'", Photo.id, "row_number() over(order by random()) as order_by").filter(search_filter)
+    #Delete existing results for this search_id
+    SearchResults.query.filter_by(search_id=saved_search.id).delete()
+    #Write results to SearchResults table
+    res = db.session.execute(
+            SearchResults.__table__
+            .insert().from_select(
+                names=['search_id', 'photo_id','order_by'],
+                select=search_query.selectable))
+
+    db.session.commit()
 
 
 @bp.route('/photos/<path:filename>')
@@ -116,13 +148,13 @@ def photos(filename):
 #         img = Photo.query.first().location
 #     return send_from_directory(os.path.dirname(img), os.path.basename(img))
 
-@bp.route('/slideshow', methods=['GET','POST'])
+
+@bp.route('/slideshow')
 @login_required
 def slideshow():
-    img = request.args.get('img', type=str)
-    if not img:
-        img = Photo.query.first().location
-    return render_template('slideshow.html', img=img)
+    return render_template('slideshow.html')
+
+
 
 @bp.route('/galleria')
 @login_required
@@ -170,14 +202,18 @@ def identify_faces():
 @bp.route('/label_faces')
 @login_required
 def label_faces():
+    search_id = request.args.get('search_id')
     page = request.args.get('page', 1, type=int)
-    #TODO make this get list from search or something
-    photos = Photo.query.order_by(Photo.id).paginate(page, 1, False)
+    # random_order = request.args.get('random', type=bool)
+    # if random_order:
+    #     next_page =
+    #TODO handle no results and add control of ordering
+    photos = Photo.query.join(SearchResults).filter_by(search_id=search_id).order_by(SearchResults.order).paginate(page, 1, False)
     photo = photos.items[0]
     #photo_faces = PhotoFace.query.filter_by(photo_id=photo.id).all()
-    next_url = url_for('main.label_faces', page=photos.next_num) \
+    next_url = url_for('main.label_faces', search_id=search_id, page=photos.next_num) \
         if photos.has_next else None
-    prev_url = url_for('main.label_faces', page=photos.prev_num) \
+    prev_url = url_for('main.label_faces', search_id=search_id, page=photos.prev_num) \
         if photos.has_prev else None
     face_dictionaries =[]
     #convert the information stored in photo_faces into json friendly dictionaries

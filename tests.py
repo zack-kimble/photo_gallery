@@ -2,15 +2,16 @@
 from datetime import datetime, timedelta
 import unittest, pytest, tempfile, os
 from app import create_app, db
-from app.models import User, Photo, PhotoFace, Task
+from app.models import User, Photo, PhotoFace, Task, SavedSearch, SearchResults
 from config import Config
-from app.tasks import detect_faces_task, create_embeddings_task
+from app.tasks import detect_faces_task, create_embeddings_task, identify_faces_task
 from flask import session, g
 from flask_login import current_user
 from app.main.routes import detect_faces
 
 from webtest import TestApp
 #from pytest_mock import mocker
+from sqlalchemy import text
 
 class TestConfig(Config):
     TESTING = True
@@ -44,7 +45,7 @@ def client(app):
 def runner(app):
     return app.test_cli_runner()
 
-@pytest.fixture
+@pytest.fixture(scope='module')
 def testapp(app):
     """Create Webtest app."""
     return TestApp(app)
@@ -65,27 +66,39 @@ def init_database(app):
 
     db.drop_all()
 
+@pytest.fixture(scope='module')
 def test_PhotoDirectoryForm(testapp, init_database):
     rv = testapp.get('/')
     form = rv.forms[0] #can't figure out where to name the form so it shows up here
     form['path'] = '/home/zack/PycharmProjects/photo_gallery/test_assets/client_files'
-    result = form.submit()
+    result = form.submit(name='submit')
     assert Photo.query.count() == 243
     Photo.query.delete()
     db.session.commit()
+
+@pytest.fixture(scope='module')
+def create_test_search(testapp, init_database):
+    rv = testapp.get('/')
+    form = rv.forms[1]  # can't figure out where to name the form so it shows up here
+    form['name'] = 'Kacey'
+    form['people'] = 'Kacey'
+    form['search_by_people'] = True
+    result = form.submit(name='create')
+    assert SavedSearch.query.filter_by(name='Kacey').first()
 
 @pytest.fixture(scope='module')
 def populate_test_photos(init_database):
     photo1 = Photo(location='Kacey_Musgraves.jpg')
     photo2 = Photo(location='Tom_Petty.jpg')
     photo3 = Photo(location='Twin.jpg')
-    db.session.add_all([photo1, photo2, photo3])
+    photo4 = Photo(location='Kacey_Musgraves_2.jpg')
+    db.session.add_all([photo1, photo2, photo3, photo4])
     db.session.commit()
     yield db
     Photo.query.delete()
     db.session.commit()
 
-@pytest.fixture()
+@pytest.fixture(scope='module')
 def login(testapp):
     res = testapp.get("/auth/login")
     form = res.forms[0]
@@ -94,30 +107,59 @@ def login(testapp):
     # Submits
     res = form.submit()
 
-def test_detect_faces_route(testapp, client, login, init_database):
+
+@pytest.fixture(scope='module')
+def test_detect_faces_route(testapp, client, init_database, login):
     result = testapp.get('/detect_faces')
     assert Task.query.filter_by(name='detect_faces_task').count() == 1
     result = testapp.get('/detect_faces')
     assert Task.query.filter_by(name='detect_faces_task').count() == 1
 
+#these tests need to be executed in a particular order.  Right now pytest-order would work, but I went with chaining them as fixtures so the dependencies would be explicit if things become less linear.
+@pytest.fixture(scope='module')
 def test_detect_faces_task(client, init_database, populate_test_photos):
     detect_faces_task(storage_root='test_assets/faces')
-    assert PhotoFace.query.count() == 4
+    assert PhotoFace.query.count() == 5
 
-def test_photo_face(testapp,login,init_database):
-    rv = testapp.put_json('/photo_face/1', dict(name='Erin', name_auto=False))
-    assert PhotoFace.query.get(1).name == 'Erin'
+@pytest.fixture(scope='module')
+def test_photo_face(testapp,init_database, login, test_detect_faces_task):
+    rv = testapp.put_json('/photo_face/1', dict(name='Kacey', name_auto=False))
+    rv = testapp.put_json('/photo_face/2', dict(name='Tom', name_auto=False))
+    assert PhotoFace.query.get(1).name == 'Kacey'
+    assert PhotoFace.query.get(2).name == 'Tom'
 
-def test_create_faces_route(testapp, login, init_database):
+@pytest.fixture(scope='module')
+def test_create_embeddings_route(testapp, login, init_database, test_detect_faces_task):
     result = testapp.get('/create_embeddings')
     assert Task.query.filter_by(name='create_embeddings_task').count() == 1
     result = testapp.get('/create_embeddings')
     assert Task.query.filter_by(name='create_embeddings_task').count() == 1
 
-def test_create_embeddings_task(client, init_database, populate_test_photos):
+@pytest.fixture(scope='module')
+def test_create_embeddings_task(client, init_database, populate_test_photos, test_detect_faces_task):
     create_embeddings_task()
     assert PhotoFace.query.first().embedding is not None
 
-def test_identify_faces_task(client, init_database, populate_test_photos):
-    detect_faces_task()
-    assert PhotoFace.query.first().name is not None
+@pytest.fixture(scope='module')
+def test_identify_faces_task(client, init_database, populate_test_photos, test_create_embeddings_task, test_photo_face):
+    #Create manual labels moved to test_photo_face
+    # kacey = Photo.query.filter(text("photo.location like '%Kacey%'")).first().photo_faces
+    # tom = Photo.query.filter(text("photo.location like '%Tom%'")).first().photo_faces
+    # kacey.name = 'Kacey'
+    # tom.name = 'Tom'
+
+    identify_faces_task()
+    assert PhotoFace.query.get(5).name == 'Kacey'
+
+#TODO: need to either run after identify or create setup to add matching photofaces
+def test_search_execution(testapp, create_test_search,test_identify_faces_task):
+    rv = testapp.get('/')
+    form = rv.forms[2]  # can't figure out where to name the form so it shows up here
+    form['search_name'] = 1
+    form['use_cache'] = False
+    form['ordering'] = 'c'
+    result = form.submit(name='browse')
+    assert SearchResults.query.filter_by(search_id=1).first()
+
+
+#def test_label_page(testapp, )

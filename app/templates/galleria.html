@@ -9,8 +9,12 @@
 
 {% block content %}
 <div class="galleria">
-    <img src="{{url_for('static', filename='photo1.JPG')}}">
-    <img src="{{url_for('static', filename='photo2.JPG')}}">
+{#    <img src="{{url_for('static', filename='photo1.JPG')}}" data-title="Cali-Erin" data-description="Above Tuna Canyon">#}
+{#    <img src="{{url_for('static', filename='photo2.JPG')}}">#}
+</div>
+<div class="test",id="test1">
+    <p>test text1</p>
+    <div class="subtest", id="subtest1"><ul><li>blah</li></ul> </div>
 </div>
 {% endblock %}
 
@@ -18,12 +22,43 @@
 {{ super() }}
 <script src="{{url_for('static', filename='galleria/galleria.min.js')}}"></script>
 <script>
+    var measures = {height:window.screen.availHeight, width:window.screen.availWidth};
+    var data = [
+            {image: "{{url_for('static', filename='photo1.JPG')}}", thumb: "https://icon-library.com/images/twitter-small-icon/twitter-small-icon-14.jpg", title: 'Cali-Erin', description:'Above Tuna Canyon'},
+            {image:"{{url_for('static', filename='photo2.JPG')}}"}
+         ];
     (function() {
         Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');
         Galleria.run('.galleria',{
             transition: 'fade',
-            imageCrop: false
+            imageCrop: false,
+            dataSource: data,
+            thumbnails: 'lazy',
+            extend: function(options) {
+                console.log(this.getThemeName())
+                console.dir($('.galleria').children())
+                console.dir(this.$('thumblink'))
+                var gallery = this;
+                {#this.$('thumblink').on('click:fast',function(e){Galleria.log('click captured')})#}
+                this.$('thumblink').on('click:fast',function(e){gallery.lazyLoadChunks(10)})
+            }
         });
     }());
+    {#Galleria.get(0).resize(measures)#}
+    {#Galleria.log("resized")#}
+    {#console.log(Galleria.get(0))#}
+    {#console.dir(Galleria.get(0).getDataLength())#}
+    {#console.dir(Galleria.get(0).$('galleria-bar'))#}
+    {# console.log(Galleria.get(0)._dom.$('thumblink')){#on('click:fast',function(e){Galleria.log('click captured')})#}
+    {#console.dir($('.galleria'))#}
+    {#console.dir($('.galleria').children())#}
+    {#console.dir($('.galleria').find('.galleria-thumblink'))#}
+    {#console.dir($('.galleria-thumblink'))#}
+    {#console.dir($('.test'))#}
+    {#console.dir($('.test').children())#}
+    {#console.dir($('.subtest'))#}
+    
+    ;
+    {#Galleria.get(0).lazyLoad([0,1])#}
 </script>
 {% endblock %}

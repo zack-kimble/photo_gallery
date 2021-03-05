@@ -184,3 +184,9 @@ class SavedSearch(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, unique=True)
     people = db.Column(db.String)
+
+class SearchResults(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    search_id = db.Column(db.Integer, db.ForeignKey('saved_search.id'))
+    photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'))
+    order_by = db.Column(db.Integer, index=True)

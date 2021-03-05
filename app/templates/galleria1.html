@@ -1,7 +1,7 @@
 <html>
     <head>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/galleria/1.5.7/galleria.min.js"></script>
+        <script src="{{url_for('static', filename='galleria/galleria.min.js')}}"></script>
 
         <style>
             .galleria{ width: 700px; height: 400px; background: #000 }
@@ -14,7 +14,7 @@
         </div>
         <script>
             (function() {
-                Galleria.loadTheme('https://cdnjs.cloudflare.com/ajax/libs/galleria/1.5.7/themes/classic/galleria.classic.min.js');
+                Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');
                 Galleria.run('.galleria');
             }());
         </script>

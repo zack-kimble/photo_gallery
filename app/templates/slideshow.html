@@ -1,5 +1,43 @@
-{% extends "base.html" %}
+{% extends 'bootstrap/base.html' %}
 
-{% block app_content %}
-     <img class="item" src="{{url_for('photos',filename=img)}}"/>
+{% block styles %}
+{{ super() }}
+<style>
+    .galleria{ width: 1800px; height: 1200px; background: #000000}
+</style>
+{%  endblock %}
+
+{% block content %}
+<div class="galleria">
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{url_for('static', filename='galleria/galleria.min.js')}}"></script>
+<script>
+    var measures = {height:window.screen.availHeight, width:window.screen.availWidth};
+    var data = [
+            {image: "{{url_for('static', filename='photo1.JPG')}}", thumb: "https://icon-library.com/images/twitter-small-icon/twitter-small-icon-14.jpg", title: 'Cali-Erin', description:'Above Tuna Canyon'},
+            {image:"{{url_for('static', filename='photo2.JPG')}}"}
+         ];
+    (function() {
+        Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');
+        Galleria.run('.galleria',{
+            transition: 'fade',
+            imageCrop: false,
+            dataSource: data,
+            thumbnails: 'lazy',
+            extend: function(options) {
+                console.log(this.getThemeName())
+                console.dir($('.galleria').children())
+                console.dir(this.$('thumblink'))
+                var gallery = this;
+                {#this.$('thumblink').on('click:fast',function(e){Galleria.log('click captured')})#}
+                this.$('thumblink').on('click:fast',function(e){gallery.lazyLoadChunks(10)})
+            }
+        });
+    }());
+
+</script>
 {% endblock %}
