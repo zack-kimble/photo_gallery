@@ -66,7 +66,7 @@ def init_database(app):
 
     db.drop_all()
 
-@pytest.fixture(scope='module')
+#@pytest.fixture(scope='module')
 def test_PhotoDirectoryForm(testapp, init_database):
     rv = testapp.get('/')
     form = rv.forms[0] #can't figure out where to name the form so it shows up here
@@ -117,7 +117,7 @@ def test_detect_faces_route(testapp, client, init_database, login):
 
 #these tests need to be executed in a particular order.  Right now pytest-order would work, but I went with chaining them as fixtures so the dependencies would be explicit if things become less linear.
 @pytest.fixture(scope='module')
-def test_detect_faces_task(client, init_database, populate_test_photos):
+def test_detect_faces_task(app, init_database, populate_test_photos):
     detect_faces_task(storage_root='test_assets/faces')
     assert PhotoFace.query.count() == 5
 
@@ -152,6 +152,7 @@ def test_identify_faces_task(client, init_database, populate_test_photos, test_c
     assert PhotoFace.query.get(5).name == 'Kacey'
 
 #TODO: need to either run after identify or create setup to add matching photofaces
+@pytest.fixture()
 def test_search_execution(testapp, create_test_search,test_identify_faces_task):
     rv = testapp.get('/')
     form = rv.forms[2]  # can't figure out where to name the form so it shows up here
@@ -163,3 +164,6 @@ def test_search_execution(testapp, create_test_search,test_identify_faces_task):
 
 
 #def test_label_page(testapp, )
+
+def test_get_search_results(testapp, test_search_execution):
+    rv = testapp.get('/search/1/results?query_range=30&is_slideshow=true&index=1')

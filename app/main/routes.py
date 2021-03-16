@@ -4,10 +4,12 @@ from flask import current_app as app
 from flask_login import current_user, login_required
 from app import db
 from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm
-from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults
+from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, PhotoMetadata
 from app.utils import build_image_paths
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
+
+from werkzeug.http import HTTP_STATUS_CODES
 
 import os
 import warnings
@@ -48,6 +50,12 @@ def index():
         photo_paths = build_image_paths(full_path)
         for photo_path in photo_paths:
             photo = Photo(location=photo_path)
+
+            keywords = photo_path.split('/')
+            for keyword in keywords:
+                metadata = PhotoMetadata(key='path_keyword',
+                                         value=keyword)
+                photo.photo_metadata.append(metadata)
             db.session.add(photo)
         db.session.commit()
         flash('Photos added!')
@@ -55,11 +63,9 @@ def index():
     elif create_search_form.create.data and create_search_form.validate():
         #run_now = create_search_form.run_now.data
         name = create_search_form.name.data
-        if create_search_form.search_by_people.data:
-            people = create_search_form.people.data
-        else:
-            people = None
-        search = SavedSearch(name=name, people=people)
+        people = create_search_form.people.data
+        keywords = create_search_form.keywords.data
+        search = SavedSearch(name=name, people=people, keywords=keywords)
         db.session.add(search)
         db.session.commit()
         flash('Search saved')
@@ -99,7 +105,7 @@ def index():
 
     return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form)
 
-def parse_names(input):
+def parse_values(input):
     input = input.replace(', ', ' and ')
     algebra = boolean.BooleanAlgebra()
     expression = algebra.parse(input).simplify()
@@ -118,10 +124,20 @@ def boolean_algebra_to_slqalchemy(expression,  child_object, child_table_column)
 
 def execute_search(saved_search_id, ordering):
     saved_search = SavedSearch.query.get(saved_search_id)
-    expression = parse_names(saved_search.people)
-    search_filter = boolean_algebra_to_slqalchemy(expression, child_object=Photo.photo_faces, child_table_column=PhotoFace.name)
+    #will return all photos if no keywords match
+    #TODO make this less ugly and support more possible filters without long list of if/then
+    search_filter = and_()
+    if saved_search.people:
+        people_expression = parse_values(saved_search.people)
+        people_filter = boolean_algebra_to_slqalchemy(people_expression, child_object=Photo.photo_faces, child_table_column=PhotoFace.name)
+        search_filter = and_(search_filter, people_filter)
+    if saved_search.keywords:
+        keyword_expression = parse_values(saved_search.keywords)
+        keyword_filter = boolean_algebra_to_slqalchemy(expression=keyword_expression, child_object=Photo.photo_metadata, child_table_column=PhotoMetadata.value)
+        search_filter = and_(search_filter, keyword_filter)
+
     #TODO: support something other than random order.
-    search_query = Photo.query.with_entities(f"'{saved_search.id}'", Photo.id, "row_number() over(order by random()) as order_by").filter(search_filter)
+    search_query = Photo.query.with_entities(f"'{saved_search.id}'", Photo.id, "row_number() over(order by random())-1 as order_by").filter(search_filter)
     #Delete existing results for this search_id
     SearchResults.query.filter_by(search_id=saved_search.id).delete()
     #Write results to SearchResults table
@@ -149,17 +165,18 @@ def photos(filename):
 #     return send_from_directory(os.path.dirname(img), os.path.basename(img))
 
 
+@bp.route('/static_photo')
+@login_required
+def static_photo():
+    return render_template('static_photo.html')
+
+
+
 @bp.route('/slideshow')
 @login_required
 def slideshow():
-    return render_template('slideshow.html')
-
-
-
-@bp.route('/galleria')
-@login_required
-def galleria():
-    return render_template('galleria.html')
+    search_id = request.args.get('search_id')
+    return render_template('slideshow.html', search_id=search_id)
 
 @bp.route('/galleria1')
 @login_required
@@ -208,7 +225,7 @@ def label_faces():
     # if random_order:
     #     next_page =
     #TODO handle no results and add control of ordering
-    photos = Photo.query.join(SearchResults).filter_by(search_id=search_id).order_by(SearchResults.order).paginate(page, 1, False)
+    photos = Photo.query.join(SearchResults).filter_by(search_id=search_id).order_by(SearchResults.order_by).paginate(page, 1, False)
     photo = photos.items[0]
     #photo_faces = PhotoFace.query.filter_by(photo_id=photo.id).all()
     next_url = url_for('main.label_faces', search_id=search_id, page=photos.next_num) \
@@ -217,7 +234,7 @@ def label_faces():
         if photos.has_prev else None
     face_dictionaries =[]
     #convert the information stored in photo_faces into json friendly dictionaries
-    #TODO: figure out better way of preparing for serialization. This fixes numbers but causes booleans become 'True'
+    #TODO: figure out better way of preparing for serialization. This fixes numbers but causes booleans become 'True'. Also should maybe add to_dict() mehtod to photo_faces
     for face in photo.photo_faces:
         face_dictionary = {}
         for column in face.__table__.columns:
@@ -239,6 +256,23 @@ def update_photo_face(id):
     resp = jsonify(success=True)
     return resp
 
+@bp.route('/search/<int:search_id>/results', methods=['GET'])
+@login_required
+def get_search_results(search_id):
+    if request.args.get('get_range'):
+        start = int(request.args.get('start'))
+        stop = int(request.args.get('stop'))
+        app.logger.info(f"search results for range start: {start}, stop: {stop}")
+        photos = SearchResults.query.filter_by(search_id=search_id).filter(SearchResults.order_by.between(start, stop)).all()
+        app.logger.info(f"{len(photos)} results")
+        data = [photo.to_dict() for photo in photos]
+        galleria_name_map = {'image': 'url', 'title': 'location'}
+        for photo in data:
+            for k, v in galleria_name_map.items():
+                photo[k] = photo.pop(v)
+        return jsonify(data)
+    else:
+        return bad_request("only works for request for slideshow with query range")
 
 @bp.app_errorhandler(404)
 def not_found_error(error):
@@ -249,4 +283,13 @@ def internal_error(error):
     db.session.rollback()
     return render_template('500.html'), 500
 
+def error_response(status_code, message=None):
+    payload = {'error': HTTP_STATUS_CODES.get(status_code, 'Unknown error')}
+    if message:
+        payload['message'] = message
+    response = jsonify(payload)
+    response.status_code = status_code
+    return response
 
+def bad_request(message):
+    return error_response(400, message)

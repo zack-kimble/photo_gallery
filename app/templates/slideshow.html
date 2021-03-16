@@ -9,6 +9,12 @@
 
 {% block content %}
 <div class="galleria">
+{#    <img src="{{url_for('static', filename='photo1.JPG')}}" data-title="Cali-Erin" data-description="Above Tuna Canyon">#}
+{#    <img src="{{url_for('static', filename='photo2.JPG')}}">#}
+</div>
+<div class="test",id="test1">
+    <p>test text1</p>
+    <div class="subtest", id="subtest1"><ul><li>blah</li></ul> </div>
 </div>
 {% endblock %}
 
@@ -17,27 +23,149 @@
 <script src="{{url_for('static', filename='galleria/galleria.min.js')}}"></script>
 <script>
     var measures = {height:window.screen.availHeight, width:window.screen.availWidth};
-    var data = [
-            {image: "{{url_for('static', filename='photo1.JPG')}}", thumb: "https://icon-library.com/images/twitter-small-icon/twitter-small-icon-14.jpg", title: 'Cali-Erin', description:'Above Tuna Canyon'},
-            {image:"{{url_for('static', filename='photo2.JPG')}}"}
-         ];
-    (function() {
+    var search_result_index = 1
+    var n_images = 10
+    var galleria_center_index =  Math.floor(n_images/2)
+    var start_offset = -galleria_center_index
+    var stop_offset = n_images-galleria_center_index
+    var image_data = {}
+    var start = 0
+    var stop = start + n_images
+    {#var data = [#}
+    {#    {image: "{{url_for('static', filename='photo1.JPG')}}", thumb: "https://icon-library.com/images/twitter-small-icon/twitter-small-icon-14.jpg", title: 'Cali-Erin', description:'Above Tuna Canyon'},#}
+    {#    {image:"{{url_for('static', filename='photo2.JPG')}}"}#}
+    {# ];#}
+    function get_image_data(start, stop) {
+        return $.ajax({
+            url: "{{url_for('main.get_search_results',search_id=search_id)}}",
+            type: 'get',
+            data: {start: start, stop: stop, get_range: true},
+            datatype: 'json'
+            })
+    }
+    function update_start_stop(current_image){
+        start = Math.max(current_image + start_offset,0)
+        stop = Math.max(current_image + stop_offset,n_images)
+    }
+
+
+    function launch_galleria() {
+        console.log('launching galleria')
         Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');
-        Galleria.run('.galleria',{
+        Galleria.run('.galleria', {
             transition: 'fade',
             imageCrop: false,
-            dataSource: data,
+            dataSource: image_data,
             thumbnails: 'lazy',
-            extend: function(options) {
+            extend: function (options) {
                 console.log(this.getThemeName())
                 console.dir($('.galleria').children())
                 console.dir(this.$('thumblink'))
-                var gallery = this;
+                gallery = this;
                 {#this.$('thumblink').on('click:fast',function(e){Galleria.log('click captured')})#}
-                this.$('thumblink').on('click:fast',function(e){gallery.lazyLoadChunks(10)})
-            }
-        });
-    }());
+                this.$('thumblink').on('click:fast', function (e) {
+                    gallery.lazyLoadChunks(n_images)
+                })
+                this.resize(measures)
+                this.bind("loadfinish", function (e) {
+                    current_image = gallery.getData().order_by
+                    update_start_stop(current_image)
+                    get_image_data(start, stop).success(function (response) {
+                        console.dir(response)
+                        console.log('successfully requested photo data')
+                        image_data = response;
+                        console.dir(image_data)
+                        Galleria.get(0).splice(0, n_images + 1)
+                        Galleria.get(0).push(image_data)
+                        if (current_image > galleria_center_index) {
+                            gallery.setIndex(galleria_center_index)
+                        }
+                    })
 
+                })
+            }
+        })
+    }
+    get_image_data(start,stop).success(
+        function(data){
+            image_data = data;
+            launch_galleria()
+        })
+    {#function launch_galleria(data) {#}
+    {#    console.log('launching galleria')#}
+    {#    Galleria.loadTheme('{{ url_for('static', filename='galleria/themes/twelve/galleria.twelve.min.js')}}');#}
+    {#    Galleria.run('.galleria', {#}
+    {#        transition: 'fade',#}
+    {#        imageCrop: false,#}
+    {#        dataSource: data,#}
+    {#        thumbnails: 'lazy',#}
+    {#        extend: function (options) {#}
+    {#            console.log(this.getThemeName())#}
+    {#            console.dir($('.galleria').children())#}
+    {#            console.dir(this.$('thumblink'))#}
+    {#            gallery = this;#}
+                {#this.$('thumblink').on('click:fast',function(e){Galleria.log('click captured')})#}
+    {#            this.$('thumblink').on('click:fast', function (e) {#}
+    {#                gallery.lazyLoadChunks(4)#}
+    {#            })#}
+    {#            this.resize(measures)#}
+    {#            this.bind("loadfinish", function (e) {#}
+    {#                search_result_index = gallery.getData().order_by#}
+    {#                console.log("order_by" + gallery.getData().order_by)#}
+    {#                console.log("galleria index" +  gallery.getIndex())#}
+    {#                $.ajax({#}
+    {#                    url: "{{url_for('main.get_search_results',search_id=search_id)}}",#}
+    {#                    type: 'get',#}
+    {#                    data: {query_range: 4, is_slideshow: true, index: search_result_index},#}
+    {#                    datatype: 'json',#}
+    {#                    success: function (response) {#}
+    {#                        console.dir(response)#}
+    {#                        console.log('successfully requested photo data')#}
+    {#                        var data = response;#}
+    {#                        console.dir(data)#}
+    {#                        Galleria.get(0).splice(0,5)#}
+    {#                        Galleria.get(0).push(data)#}
+                            {# also have to change index back to middle of range if it's above it. Or below if not against 0? Ugh #}
+    {#                        console.log(gallery.getData().order_by)#}
+    {#                    }#}
+    {#                })#}
+    {#            })#}
+    {#        }#}
+    {#    })#}
+    {#}#}
+    {# TODO: unify requests between initial launch and loadfinish event #}
+    {#$.ajax({url:"{{url_for('main.get_search_results',search_id=search_id)}}",#}
+    {#    type: 'get',#}
+    {#    data:{query_range:4, is_slideshow:true,index:1},#}
+    {#    datatype: 'json',#}
+    {#    success: function(response){#}
+    {#    console.dir(response)#}
+    {#    console.log('running success function')#}
+    {#    var data = response;#}
+    {#    var test = [{'test_strng': 'present'}];#}
+    {#    console.dir(data)#}
+    {#    console.dir(test)#}
+    {#    launch_galleria(data)#}
+        {#console.log('shouldve launched galleria by now');#}
+    {#}})#}
+    {# .done(launch_galleria(data));#}
+
+
+    {#Galleria.get(0).resize(measures)#}
+    {#Galleria.log("resized")#}
+    {#console.log(Galleria.get(0))#}
+    {#console.dir(Galleria.get(0).getDataLength())#}
+    {#console.dir(Galleria.get(0).$('galleria-bar'))#}
+    {# console.log(Galleria.get(0)._dom.$('thumblink')){#on('click:fast',function(e){Galleria.log('click captured')})#}
+    {#console.dir($('.galleria'))#}
+    {#console.dir($('.galleria').children())#}
+    {#console.dir($('.galleria').find('.galleria-thumblink'))#}
+    {#console.dir($('.galleria-thumblink'))#}
+    {#console.dir($('.test'))#}
+    {#console.dir($('.test').children())#}
+    {#console.dir($('.subtest'))#}
+    
+    ;
+    {#Galleria.get(0).lazyLoad([0,1])#}
 </script>
 {% endblock %}

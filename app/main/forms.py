@@ -9,8 +9,10 @@ class PhotoDirectoryForm(FlaskForm):
 
 class CreateSearchForm(FlaskForm):
     name = StringField('Create Search',validators=[DataRequired()])
-    search_by_people = BooleanField()
+    #search_by_people = BooleanField()
     people = StringField('People')
+    #search_by_metadata_keywords = BooleanField()
+    keywords = StringField('Keywords')
     create = SubmitField('Create')
 
 class LoadSearchForm(FlaskForm):

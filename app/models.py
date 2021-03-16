@@ -2,7 +2,7 @@ from datetime import datetime
 from hashlib import md5
 from time import time
 
-from flask import current_app
+from flask import current_app, url_for
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
@@ -123,7 +123,16 @@ class Photo(db.Model):
     location = db.Column(db.String, unique=True, index=True)
     photo_metadata = db.relationship('PhotoMetadata')
     photo_faces = db.relationship('PhotoFace')
+    search_results = db.relationship('SearchResults', back_populates='photo')
 
+    def to_dict(self):
+        data = {
+            'photo_id': self.id,
+            'location': self.location,
+            'metadata': self.photo_metadata,
+            'url': url_for('main.photos', filename=self.location)
+        }
+        return data
 
 class PhotoMetadata(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -184,9 +193,23 @@ class SavedSearch(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, unique=True)
     people = db.Column(db.String)
+    keywords = db.Column(db.String)
 
 class SearchResults(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     search_id = db.Column(db.Integer, db.ForeignKey('saved_search.id'))
     photo_id = db.Column(db.Integer, db.ForeignKey('photo.id'))
+    #TODO: change this to "result_index" or "search_index"
     order_by = db.Column(db.Integer, index=True)
+    photo = db.relationship('Photo', back_populates='search_results')
+
+    def to_dict(self):
+        data = {
+            'search_result_id': self.id,
+            'search_id': self.search_id,
+            'photo_id': self.photo_id,
+            'order_by': self.order_by,
+            'location': self.photo.location,
+            'url': url_for('main.photos', filename=self.photo.location)
+        }
+        return data

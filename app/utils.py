@@ -9,6 +9,8 @@ def build_image_paths(directory_path):
     files = [file.replace(directory_path,f'{last_common_dir}') for file in files]
     return files
 
+def get_keywords_from_path(photo_path):
+    keywords = photo_path.split('/')
 
 def search_creation(name, people):
     pass
