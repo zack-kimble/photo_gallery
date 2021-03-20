@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from datetime import datetime, timedelta
-import unittest, pytest, tempfile, os
+import unittest, pytest, tempfile, os, glob
 from app import create_app, db
 from app.models import User, Photo, PhotoFace, Task, SavedSearch, SearchResults
 from config import Config
@@ -8,7 +8,7 @@ from app.tasks import detect_faces_task, create_embeddings_task, identify_faces_
 from flask import session, g
 from flask_login import current_user
 from app.main.routes import detect_faces
-
+import shutil
 from webtest import TestApp
 #from pytest_mock import mocker
 from sqlalchemy import text
@@ -31,6 +31,7 @@ def app():
     db_fd, app.config['DATABASE'] = tempfile.mkstemp()
     app.app_context().push()
     print(app.config['DATABASE'])
+    app.logger.info(f"testing db location: {app.config['DATABASE']}")
 
     yield app
 
@@ -72,7 +73,13 @@ def test_PhotoDirectoryForm(testapp, init_database):
     form = rv.forms[0] #can't figure out where to name the form so it shows up here
     form['path'] = '/home/zack/PycharmProjects/photo_gallery/test_assets/client_files'
     result = form.submit(name='submit')
-    assert Photo.query.count() == 243
+    assert Photo.query.count() == 246
+    assert Photo.query.filter(Photo.location.like("%0456%")).first().location=='jpg_copy/client_files/test_tiff_directory/test_dir/DSC_0456.JPG'
+    for root, dirs, files in os.walk('test_assets/uploads'):
+        for f in files:
+            os.unlink(os.path.join(root, f))
+        for d in dirs:
+            shutil.rmtree(os.path.join(root, d))
     Photo.query.delete()
     db.session.commit()
 
@@ -82,18 +89,19 @@ def create_test_search(testapp, init_database):
     form = rv.forms[1]  # can't figure out where to name the form so it shows up here
     form['name'] = 'Kacey'
     form['people'] = 'Kacey'
-    form['search_by_people'] = True
     result = form.submit(name='create')
     assert SavedSearch.query.filter_by(name='Kacey').first()
 
 @pytest.fixture(scope='module')
 def populate_test_photos(init_database):
+    shutil.copytree('test_assets/face_processing_tests','test_assets/uploads', dirs_exist_ok =True)
     photo1 = Photo(location='Kacey_Musgraves.jpg')
     photo2 = Photo(location='Tom_Petty.jpg')
     photo3 = Photo(location='Twin.jpg')
     photo4 = Photo(location='Kacey_Musgraves_2.jpg')
     db.session.add_all([photo1, photo2, photo3, photo4])
     db.session.commit()
+
     yield db
     Photo.query.delete()
     db.session.commit()
@@ -166,4 +174,4 @@ def test_search_execution(testapp, create_test_search,test_identify_faces_task):
 #def test_label_page(testapp, )
 
 def test_get_search_results(testapp, test_search_execution):
-    rv = testapp.get('/search/1/results?query_range=30&is_slideshow=true&index=1')
+    rv = testapp.get('/search/1/results?start=1&stop=2&get_range=true')

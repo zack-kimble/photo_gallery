@@ -3,9 +3,9 @@ from flask import render_template, flash, redirect, url_for, request,  send_from
 from flask import current_app as app
 from flask_login import current_user, login_required
 from app import db
-from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm
+from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm, FaceProcessingForm
 from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, PhotoMetadata
-from app.utils import build_image_paths
+from app.utils import add_jpeg_symlinks, convert_copy_tiffs
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
 
@@ -40,14 +40,18 @@ def index():
     load_search_form_submitted = (load_search_form.slideshow.data or load_search_form.browse.data or
                                   load_search_form.label_faces.data or load_search_form.delete.data)
 
+    face_processing_form = FaceProcessingForm()
+    face_processing_form_submitted = (face_processing_form.detect.data or face_processing_form.embed.data or
+                                      face_processing_form.identify.data)
+
     if path_form.submit.data and path_form.validate():
-        full_path = path_form.path.data
-        upload_folder = app.config['UPLOAD_FOLDER']
-        try:
-            os.symlink(full_path, f'{upload_folder}/{os.path.basename(full_path)}')
-        except FileExistsError as e:
-            warnings.warn(message=f'caught error:{e}')
-        photo_paths = build_image_paths(full_path)
+        #Todo: Handle duplicates. Currently just errors
+        source_full_path = path_form.path.data
+        upload_directory = app.config['UPLOAD_FOLDER']
+        link_directory = os.path.join(upload_directory, 'linked')
+        copy_directory = os.path.join(upload_directory, 'jpg_copy')
+        photo_paths = add_jpeg_symlinks(source_full_path, link_directory)
+        photo_paths.extend(convert_copy_tiffs(source_full_path, copy_directory))
         for photo_path in photo_paths:
             photo = Photo(location=photo_path)
 
@@ -101,9 +105,15 @@ def index():
                 #return redirect(url_for('main.browse', search_results=search_results))
             elif load_search_form.label_faces.data:
                 return redirect(url_for('main.label_faces', search_id=selected_search_id))
+    elif face_processing_form_submitted and face_processing_form.validate():
+        if face_processing_form.detect.data:
+            return redirect(url_for('main.detect_faces'))
+        elif face_processing_form.embed.data:
+            return redirect(url_for('main.create_embeddings'))
+        elif face_processing_form.identify.data:
+            return redirect(url_for('main.identify_faces'))
 
-
-    return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form)
+    return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form, face_processing_form= face_processing_form)
 
 def parse_values(input):
     input = input.replace(', ', ' and ')
@@ -118,7 +128,8 @@ def boolean_algebra_to_slqalchemy(expression,  child_object, child_table_column)
     func_for_map = lambda x: boolean_algebra_to_slqalchemy(x, child_object=child_object, child_table_column=child_table_column)
     if isinstance(expression, boolean.boolean.Symbol):
         obj = expression.obj if isinstance(expression.obj, str) else repr(expression.obj)
-        return child_object.any(child_table_column == obj)
+        return child_object.any(child_table_column.like(f"%{obj}%"))
+        #return child_object.any(child_table_column == obj)
     else:
         return operator_map[expression.__class__.__name__](*map(func_for_map, expression.args))
 
@@ -272,7 +283,7 @@ def get_search_results(search_id):
                 photo[k] = photo.pop(v)
         return jsonify(data)
     else:
-        return bad_request("only works for request for slideshow with query range")
+        return bad_request("only works for request for get_range with start and stop values")
 
 @bp.app_errorhandler(404)
 def not_found_error(error):

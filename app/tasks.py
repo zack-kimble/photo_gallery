@@ -85,11 +85,7 @@ def reorient_image(im):
     except (KeyError, AttributeError, TypeError, IndexError):
         return im
 
-
-def mtcnn_detect_faces(images):
-    batch_size = 16
-    workers = 0 if os.name == 'nt' else 8
-
+def init_mtcnn():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     mtcnn = MTCNN(
@@ -102,6 +98,13 @@ def mtcnn_detect_faces(images):
         keep_all=True,
         device=device
     )
+    return mtcnn
+
+
+def mtcnn_detect_faces(images, mtcnn):
+
+    batch_size = 16
+    workers = 0 if os.name == 'nt' else 8
 
     img_ds = ImagePathsDataset(images, loader=exif_rotate_pil_loader, transform=transforms.Resize((1024, 1024)))
 
@@ -178,44 +181,53 @@ def detect_faces_task(storage_root):
     # TODO Not sure about the try/except wrapping here.
     try:
         # get image data from db
-        photos_result = Photo.query.filter(~Photo.photo_faces.any()).all() # replace with query based on something from request. This will also run pictures with no faces everytime I think. Need to think about how to save photos with no faces so they don't get rerun
+        photos_result = Photo.query.filter_by(face_detection_run=False).filter(~Photo.photo_faces.any()).all() # replace with query based on something from request. This will also run pictures with no faces everytime I think. Need to think about how to save photos with no faces so they don't get rerun
+
         if (new_photo_count := len(photos_result)) == 0:
-            app.logger.warn('no new photos found to run detection on',exc_info = sys.exc_info())
+            app.logger.warn('no new photos found to run detection on', exc_info = sys.exc_info())
             _set_task_progress(100)
             return
 
         app.logger.info(f'detecting faces in {new_photo_count} photos')
-        photo_id_list, photo_paths_list = list(zip(*[(photo.id, photo.location) for photo in photos_result]))
 
-        # get paths figured out - doing this here instead of in the mtcnn wrapper. Should be fine since the dataloader is sequential
-        load_paths_list = [os.path.join(app.config['UPLOAD_FOLDER'], photo_path) for photo_path in photo_paths_list]
-        # save_paths_list = [os.path.join(storage_root, photo_path) for photo_path in photo_paths_list]
+        outer_batch_size = 16*30
+        mtcnn = init_mtcnn()
+        for i in range((new_photo_count - 1) // outer_batch_size + 1):
+            start_i = i * outer_batch_size
+            end_i = max((start_i + outer_batch_size, new_photo_count-1))
+            photos_result_batch = photos_result[start_i:end_i]
+            photo_id_list, photo_paths_list = list(zip(*[(photo.id, photo.location) for photo in photos_result_batch]))
 
-        paths_list, boxes_list, box_probs_list, faces_list = mtcnn_detect_faces(load_paths_list)
-        face_meta_list = []
+            # get paths figured out - doing this here instead of in the mtcnn wrapper. Should be fine since the dataloader is sequential
+            load_paths_list = [os.path.join(app.config['UPLOAD_FOLDER'], photo_path) for photo_path in photo_paths_list]
+            # save_paths_list = [os.path.join(storage_root, photo_path) for photo_path in photo_paths_list]
 
-        for photo_id, path, boxes, probs, faces in zip(photo_id_list, photo_paths_list, boxes_list, box_probs_list,
-                                                       faces_list):
-            image_path, ext = os.path.splitext(path)
-            if faces is not None:
-                faces = list(transforms.functional.to_pil_image(x * 255) for x in faces.unbind())
-                for i, (box, prob, face) in enumerate(zip(boxes, probs, faces)):
-                    save_path = storage_root + '/' + image_path + '_' + str(i) + ext
-                    db_face = PhotoFace(location=save_path,
-                                        sequence=i,
-                                        bb_x1=box[0],
-                                        bb_y1=box[1],
-                                        bb_x2=box[2],
-                                        bb_y2=box[3],
-                                        bb_prob=prob,
-                                        photo_id=photo_id,
-                                        bb_auto=True
-                                        )
-                    db.session.add(db_face)
-                    store_face(face, save_path)
-        db.session.commit()
+            paths_list, boxes_list, box_probs_list, faces_list = mtcnn_detect_faces(load_paths_list, mtcnn)
+            face_meta_list = []
 
-
+            for photo_id, path, boxes, probs, faces in zip(photo_id_list, photo_paths_list, boxes_list, box_probs_list,
+                                                           faces_list):
+                image_path, ext = os.path.splitext(path)
+                if faces is not None:
+                    faces = list(transforms.functional.to_pil_image(x * 255) for x in faces.unbind())
+                    for i, (box, prob, face) in enumerate(zip(boxes, probs, faces)):
+                        save_path = storage_root + '/' + image_path + '_' + str(i) + ext
+                        db_face = PhotoFace(location=save_path,
+                                            sequence=i,
+                                            bb_x1=box[0],
+                                            bb_y1=box[1],
+                                            bb_x2=box[2],
+                                            bb_y2=box[3],
+                                            bb_prob=prob,
+                                            photo_id=photo_id,
+                                            bb_auto=True
+                                            )
+                        db.session.add(db_face)
+                        store_face(face, save_path)
+                Photo.query.get(photo_id).face_detection_run = True
+            db.session.commit()
+            app.logger.info(f"completed detection on {(i+1)*outer_batch_size} photos")
+        del mtcnn
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())
         raise ChildProcessError

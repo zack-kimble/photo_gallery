@@ -13,7 +13,7 @@ from app import db, login
 from sqlalchemy import types
 import numpy as np
 import io
-
+from sqlalchemy.sql import expression
 
 class ArrayType(types.TypeDecorator):
     impl = types.BLOB
@@ -124,6 +124,7 @@ class Photo(db.Model):
     photo_metadata = db.relationship('PhotoMetadata')
     photo_faces = db.relationship('PhotoFace')
     search_results = db.relationship('SearchResults', back_populates='photo')
+    face_detection_run = db.Column(db.BOOLEAN, nullable=False, default=False)
 
     def to_dict(self):
         data = {

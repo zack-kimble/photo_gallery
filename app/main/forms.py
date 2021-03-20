@@ -8,7 +8,7 @@ class PhotoDirectoryForm(FlaskForm):
     submit = SubmitField('Submit')
 
 class CreateSearchForm(FlaskForm):
-    name = StringField('Create Search',validators=[DataRequired()])
+    name = StringField('New search name',validators=[DataRequired()])
     #search_by_people = BooleanField()
     people = StringField('People')
     #search_by_metadata_keywords = BooleanField()
@@ -24,4 +24,10 @@ class LoadSearchForm(FlaskForm):
     browse = SubmitField('Browse')
     label_faces = SubmitField('Label')
     delete = SubmitField('Delete')
+
+class FaceProcessingForm(FlaskForm):
+    detect = SubmitField('Detect')
+    embed = SubmitField('Embed')
+    identify = SubmitField('Identify')
+
 
