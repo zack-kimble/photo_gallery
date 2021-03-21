@@ -22,4 +22,6 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}
 
 RUN git clone https://github.com/zack-kimble/photo_gallery_wip.git
 WORKDIR photo_gallery_wip
-RUN conda env create -f conda_environment.yml
+RUN ls -a
+RUN conda env create -f conda_environment.yaml
+ENTRYPOINT ["conda_activate.sh"]
