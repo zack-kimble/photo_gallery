@@ -1,0 +1,23 @@
+version: "3.8"
+services:
+  photo-gallery-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 5000:5000
+    volumes:
+      - ~/photo_gallery/uploads:/photo_gallery/uploads
+      - ~/photo_gallery/database:/photo_gallery/database
+      - ~/photo_gallery/logs:/photo_gallery/logs
+      - ~/photo_gallery/migrations/versions:/photo_gallery/migrations/versions
+      - ~/photo_gallery/faces:/photo_gallery/app/static/faces
+      - type: bind
+        source: /media/zack/WD 4TB/My Pictures
+        target: /media/zack/WD 4TB/My Pictures
+        read_only: true
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      - PHOTO_SOURCE=/media/zack/WD 4TB/My Pictures

@@ -136,9 +136,9 @@ def mtcnn_detect_faces(images, mtcnn):
 
 
 def get_arcface_embeddings(images):
-    print("arc face func: "+os.getcwd())
+    app.logger.info("arc face func: "+os.getcwd())
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print('Running on device: {}'.format(device))
+    app.logger.info('Running on device: {}'.format(device))
     batch_size = 16
     workers = 0 if os.name == 'nt' else 8
 
@@ -153,7 +153,7 @@ def get_arcface_embeddings(images):
 
     from app.insightface import model_loader #TODO figure out how to change where torch looks for model module when loading. Currently looks in the task cwd, which is the project root.
 
-    model = model_loader()
+    model = model_loader(device)
     model = model.to(device)
     model.eval()
 
@@ -179,6 +179,7 @@ def store_face(face, save_path):
 
 def detect_faces_task(storage_root):
     # TODO Not sure about the try/except wrapping here.
+    app.logger.info(f"saving photos in {storage_root}")
     try:
         # get image data from db
         photos_result = Photo.query.filter_by(face_detection_run=False).filter(~Photo.photo_faces.any()).all() # replace with query based on something from request. This will also run pictures with no faces everytime I think. Need to think about how to save photos with no faces so they don't get rerun

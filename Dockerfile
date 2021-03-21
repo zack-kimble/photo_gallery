@@ -20,8 +20,23 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}
     find /opt/conda/ -follow -type f -name '*.js.map' -delete && \
     /opt/conda/bin/conda clean -afy
 
-RUN git clone https://github.com/zack-kimble/photo_gallery_wip.git
-WORKDIR photo_gallery_wip
-RUN ls -a
+COPY ./conda_environment.yaml conda_environment.yaml
 RUN conda env create -f conda_environment.yaml
-ENTRYPOINT ["conda_activate.sh"]
+RUN apt-get update
+RUN apt-get install redis-server -y
+#RUN git clone https://github.com/zack-kimble/photo_gallery_wip.git
+WORKDIR photo_gallery
+COPY . .
+RUN ls -a
+
+RUN chmod 777 entrypoint.sh
+#ENTRYPOINT ["./conda_activate.sh"] #not login, conda init fails
+#ENTRYPOINT ["/bin/bash","--login"] #works, but in base (same as no --login option)
+#ENTRYPOINT ["/bin/bash","--login", "-c", "conda activate photo_gallery",] #works, but doesn't accept addtional command.
+#ENTRYPOINT ["/bin/bash","--login", "-c", "conda activate photo_gallery", "exec","$@"] #seems the same here
+#ENTRYPOINT ["./conda_activate.sh"]
+#ENTRYPOINT ["/bin/bash"]
+#ENTRYPOINT ["/bin/bash","--login", "-c", "conda activate photo_gallery", "exec","$@"] #works, not interactive
+#with new activate script using set -e
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["bash", "start_server.sh"]

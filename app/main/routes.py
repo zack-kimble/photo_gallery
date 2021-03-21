@@ -9,6 +9,8 @@ from app.utils import add_jpeg_symlinks, convert_copy_tiffs
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
 
+from app.tasks import identify_faces_task, create_embeddings_task, detect_faces_task
+
 from werkzeug.http import HTTP_STATUS_CODES
 
 import os
@@ -47,6 +49,10 @@ def index():
     if path_form.submit.data and path_form.validate():
         #Todo: Handle duplicates. Currently just errors
         source_full_path = path_form.path.data
+        # #when running in docker, os seems to still see host path names, but shutils sees the docker ones.
+        # if photo_source := app.config['PHOTO_SOURCE']:
+        #     app.logger.info(f"replacing {photo_source} in user supplied path for tiffs")
+        #     tiff_source_full_path = source_full_path.replace(photo_source, 'photo_source')
         upload_directory = app.config['UPLOAD_FOLDER']
         link_directory = os.path.join(upload_directory, 'linked')
         copy_directory = os.path.join(upload_directory, 'jpg_copy')
@@ -197,33 +203,42 @@ def galleria1():
 @bp.route('/detect_faces')
 @login_required
 def detect_faces():
-    if current_user.get_task_in_progress('detect_faces_task'):
-        flash('Detection task is currently in progress')
-    else:
-        current_user.launch_task('detect_faces_task', 'Detecting Faces...', storage_root='app/static/faces')
-        db.session.commit()
-        flash('Detection task started')
-    return render_template('detect_faces.html')
+    flash('Detect faces task started')
+    detect_faces_task(storage_root='app/static/faces')
+    flash("Detect faces task complete")
+    # if current_user.get_task_in_progress('detect_faces_task'):
+    #     flash('Detection task is currently in progress')
+    # else:
+    #     current_user.launch_task('detect_faces_task', 'Detecting Faces...', storage_root='app/static/faces')
+    #     db.session.commit()
+    #     flash('Detection task started')
+    return redirect(url_for('main.index'))
 
 @bp.route('/create_embeddings')
 def create_embeddings():
-    if current_user.get_task_in_progress('create_embeddings_task'):
-        flash('Embedding task is currently in progress')
-    else:
-        current_user.launch_task('create_embeddings_task', 'Embedding Faces...')
-        db.session.commit()
-        flash('Embedding task started')
+    flash('Embedding task started')
+    create_embeddings_task()
+    flash("Embedding task complete")
+    # if current_user.get_task_in_progress('create_embeddings_task'):
+    #     flash('Embedding task is currently in progress')
+    # else:
+    #     current_user.launch_task('create_embeddings_task', 'Embedding Faces...')
+    #     db.session.commit()
+    #     flash('Embedding task started')
     return redirect(url_for('main.index'))
 
 
 @bp.route('/identify_faces')
 def identify_faces():
-    if current_user.get_task_in_progress('identify_faces_task'):
-        flash('Identify faces task is currently in progress')
-    else:
-        current_user.launch_task('identify_faces_task', 'Identify faces...')
-        db.session.commit()
-        flash('Identify faces task started')
+    flash('Identify faces task started')
+    identify_faces_task()
+    flash("Identify faces task complete")
+    # if current_user.get_task_in_progress('identify_faces_task'):
+    #     flash('Identify faces task is currently in progress')
+    # else:
+    #     current_user.launch_task('identify_faces_task', 'Identify faces...')
+    #     db.session.commit()
+    #     flash('Identify faces task started')
     return redirect(url_for('main.index'))
 
 
