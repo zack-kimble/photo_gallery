@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from datetime import datetime, timedelta
-import unittest, pytest, tempfile, os, glob
+import unittest, pytest, tempfile, os, glob, shutil
 from app import create_app, db
 from app.models import User, Photo, PhotoFace, Task, SavedSearch, SearchResults
 from config import Config
@@ -10,6 +10,7 @@ from flask_login import current_user
 from app.main.routes import detect_faces
 import shutil
 from webtest import TestApp
+from app.utils import ignore
 #from pytest_mock import mocker
 from sqlalchemy import text
 
@@ -175,3 +176,7 @@ def test_search_execution(testapp, create_test_search,test_identify_faces_task):
 
 def test_get_search_results(testapp, test_search_execution):
     rv = testapp.get('/search/1/results?start=1&stop=2&get_range=true')
+
+def test_ignore_function():
+    shutil.copytree('test_assets/copytree_test', 'test_assets/copytree_test_output', ignore=ignore, dirs_exist_ok=True)
+    assert len(os.listdir('test_assets/copytree_test_output'))==1

@@ -1,8 +1,8 @@
-"""initial schema
+"""empty message
 
-Revision ID: a679943d6212
+Revision ID: cd877b65b0f3
 Revises: 
-Create Date: 2020-11-05 13:22:37.896624
+Create Date: 2021-03-22 21:36:40.080071
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import app.models
 
 
 # revision identifiers, used by Alembic.
-revision = 'a679943d6212'
+revision = 'cd877b65b0f3'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -22,9 +22,18 @@ def upgrade():
     op.create_table('photo',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('location', sa.String(), nullable=True),
+    sa.Column('face_detection_run', sa.BOOLEAN(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_photo_location'), 'photo', ['location'], unique=True)
+    op.create_table('saved_search',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('people', sa.String(), nullable=True),
+    sa.Column('keywords', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
     op.create_table('user',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('username', sa.String(length=64), nullable=True),
@@ -34,12 +43,6 @@ def upgrade():
     )
     op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
     op.create_index(op.f('ix_user_username'), 'user', ['username'], unique=True)
-    op.create_table('followers',
-    sa.Column('follower_id', sa.Integer(), nullable=True),
-    sa.Column('followed_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['followed_id'], ['user.id'], ),
-    sa.ForeignKeyConstraint(['follower_id'], ['user.id'], )
-    )
     op.create_table('photo_face',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('location', sa.Integer(), nullable=False),
@@ -67,6 +70,16 @@ def upgrade():
     )
     op.create_index(op.f('ix_photo_metadata_key'), 'photo_metadata', ['key'], unique=False)
     op.create_index(op.f('ix_photo_metadata_value'), 'photo_metadata', ['value'], unique=False)
+    op.create_table('search_results',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('search_id', sa.Integer(), nullable=True),
+    sa.Column('photo_id', sa.Integer(), nullable=True),
+    sa.Column('order_by', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['photo_id'], ['photo.id'], ),
+    sa.ForeignKeyConstraint(['search_id'], ['saved_search.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_search_results_order_by'), 'search_results', ['order_by'], unique=False)
     op.create_table('task',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('name', sa.String(length=128), nullable=True),
@@ -94,14 +107,16 @@ def downgrade():
     op.drop_table('face_embedding')
     op.drop_index(op.f('ix_task_name'), table_name='task')
     op.drop_table('task')
+    op.drop_index(op.f('ix_search_results_order_by'), table_name='search_results')
+    op.drop_table('search_results')
     op.drop_index(op.f('ix_photo_metadata_value'), table_name='photo_metadata')
     op.drop_index(op.f('ix_photo_metadata_key'), table_name='photo_metadata')
     op.drop_table('photo_metadata')
     op.drop_table('photo_face')
-    op.drop_table('followers')
     op.drop_index(op.f('ix_user_username'), table_name='user')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_table('user')
+    op.drop_table('saved_search')
     op.drop_index(op.f('ix_photo_location'), table_name='photo')
     op.drop_table('photo')
     # ### end Alembic commands ###

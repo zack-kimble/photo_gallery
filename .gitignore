@@ -15,6 +15,7 @@ _mailinglist
 .idea/
 docs/_build/
 .vscode
+__pycache__
 
 # Coverage reports
 htmlcov/
@@ -24,26 +25,9 @@ htmlcov/
 
 #photo_gallery added
 app.db
-uploads/*
+uploads
 logs
 app/static/faces
 dump.rdb
 other_alembic
-migrations/versions/*
-
-__pycache__/
-*.git
-test_assets/
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*/__pycache__/
-*/*/__pycache__/
-*/*/*/__pycache__/
-*.py[cod]
-*/*.py[cod]
-*/*/*.py[cod]
-*/*/*/*.py[cod]
-
-Dockerfile*
-.dockerignore
+*.tar

@@ -19,19 +19,6 @@ import numpy as np
 from sklearn.neighbors import RadiusNeighborsClassifier
 
 
-class TestConfig(Config):
-    TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite://'
-    ELASTICSEARCH_URL = None
-    UPLOAD_FOLDER = 'test_assets/uploads'
-
-
-if os.environ.get('PYTEST'):
-    app = create_app(TestConfig)
-    app.app_context().push()
-else:
-    app = create_app()
-    app.app_context().push()
 
 print("after context push:"+os.getcwd())
 #def run_search
@@ -301,6 +288,18 @@ def identify_faces_task():
     #     raise ChildProcessError
     # finally:
     #     _set_task_progress(100)
+class TestConfig(Config):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite://'
+    ELASTICSEARCH_URL = None
+    UPLOAD_FOLDER = 'test_assets/uploads'
+
+
 
 if __name__ == '__main__':
-    create_embeddings_task()
+    if os.environ.get('PYTEST'):
+        app = create_app(TestConfig)
+        app.app_context().push()
+    else:
+        app = create_app()
+        app.app_context().push()
