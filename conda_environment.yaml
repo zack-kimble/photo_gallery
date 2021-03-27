@@ -92,4 +92,7 @@ dependencies:
     - visitor==0.1.3
     - rq-dashboard
 prefix: /home/zack/miniconda3/envs/photo_gallery
-
+#For dev outside container
+#variables:
+#  UPLOAD_FOLDER: /home/zack/PycharmProjects/photo_gallery/uploads
+#  PHOTO_SOURCE: "/media/zack/WD 4TB/My Pictures"

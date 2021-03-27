@@ -3,7 +3,7 @@ import glob, os, warnings, shutil, pathlib
 from PIL import Image
 
 def ignore(dir, files):
-    return [f for f in files if os.path.isfile(os.path.join(dir, f)) or f.lower() =='.trashes']
+    return [f for f in files if os.path.isfile(os.path.join(dir, f)) or not os.access(os.path.join(dir, f), os.R_OK)]
 
 #Todo: honestly just need to diagram both these functions and probably completely rebuild using os.walk and indexes
 def add_jpeg_symlinks(source_directory, target_directory):
@@ -31,7 +31,7 @@ def convert_copy_tiffs(source_directory, target_directory):
     files.extend(glob.glob(source_directory + '/**/*.tiff', recursive=True))
     files.extend(glob.glob(source_directory + '/**/*.TIF', recursive=True))
     files.extend(glob.glob(source_directory + '/**/*.tif', recursive=True))
-    shutil.copytree(source_directory, os.path.join(target_directory,last_common_dir), ignore=ignore, dirs_exist_ok=True)
+    shutil.copytree(source_directory, os.path.join(target_directory,last_common_dir), ignore=ignore, dirs_exist_ok=True, ignore_dangling_symlinks=True)
 
     target_paths = [os.path.splitext(path)[0].replace(source_directory, last_common_dir)+'.JPG' for path in files]
     for file, target in zip(files, target_paths):
