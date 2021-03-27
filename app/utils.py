@@ -31,8 +31,13 @@ def convert_copy_tiffs(source_directory, target_directory):
     files.extend(glob.glob(source_directory + '/**/*.tiff', recursive=True))
     files.extend(glob.glob(source_directory + '/**/*.TIF', recursive=True))
     files.extend(glob.glob(source_directory + '/**/*.tif', recursive=True))
-    shutil.copytree(source_directory, os.path.join(target_directory,last_common_dir), ignore=ignore, dirs_exist_ok=True, ignore_dangling_symlinks=True)
-
+    #TODO figure this out
+    #somehow this is still causing errors on directories where it doesn't have permissions despite ignore, but only on mac. Checked the .Trashes and other hidden directories and they are -rwxrwxrwx, so not sure what the deal is.
+    #Anyway, wrapping in try except. Will just log the shutil.Errors at end.
+    try:
+        shutil.copytree(source_directory, os.path.join(target_directory,last_common_dir), ignore=ignore, dirs_exist_ok=True, ignore_dangling_symlinks=True)
+    except shutil.Error as e:
+        Warning(f'copytree completed, but ran into some errors:{e}')
     target_paths = [os.path.splitext(path)[0].replace(source_directory, last_common_dir)+'.JPG' for path in files]
     for file, target in zip(files, target_paths):
         save_path = os.path.join(target_directory, target)

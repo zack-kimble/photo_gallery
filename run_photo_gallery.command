@@ -4,3 +4,5 @@ cd "${DIR}"
 
 docker-compose down
 docker-compose up
+
+open http://0.0.0.0:5000
