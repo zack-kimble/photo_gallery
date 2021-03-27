@@ -2,7 +2,7 @@ from app import create_app, db
 from app.models import User, Photo, Task, PhotoFace, FaceEmbedding, SavedSearch, SearchResults
 
 app = create_app()
-#app.run()
+app.run()
 
 @app.shell_context_processor
 def make_shell_context():

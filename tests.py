@@ -87,7 +87,7 @@ def test_PhotoDirectoryForm(testapp, init_database):
 @pytest.fixture(scope='module')
 def create_test_search(testapp, init_database):
     rv = testapp.get('/')
-    form = rv.forms[1]  # can't figure out where to name the form so it shows up here
+    form = rv.forms[2]  # can't figure out where to name the form so it shows up here
     form['name'] = 'Kacey'
     form['people'] = 'Kacey'
     result = form.submit(name='create')
@@ -164,7 +164,7 @@ def test_identify_faces_task(client, init_database, populate_test_photos, test_c
 @pytest.fixture()
 def test_search_execution(testapp, create_test_search,test_identify_faces_task):
     rv = testapp.get('/')
-    form = rv.forms[2]  # can't figure out where to name the form so it shows up here
+    form = rv.forms[3]  # can't figure out where to name the form so it shows up here
     form['search_name'] = 1
     form['use_cache'] = False
     form['ordering'] = 'c'

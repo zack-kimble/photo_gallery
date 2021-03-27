@@ -7,6 +7,10 @@ ENV PATH /opt/conda/bin:$PATH
 ARG CONDA_VERSION=py38_4.9.2
 ARG CONDA_MD5=122c8c9beb51e124ab32a0fa6426c656
 
+RUN apt-get update
+RUN apt-get upgrade -y
+RUN apt-get install redis-server -y
+
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh -O miniconda.sh && \
     echo "${CONDA_MD5}  miniconda.sh" > miniconda.md5 && \
     if ! md5sum --status -c miniconda.md5; then exit 1; fi && \
@@ -22,8 +26,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}
 
 COPY ./conda_environment.yaml conda_environment.yaml
 RUN conda env create -f conda_environment.yaml
-RUN apt-get update
-RUN apt-get install redis-server -y
+
 #RUN git clone https://github.com/zack-kimble/photo_gallery_wip.git
 WORKDIR photo_gallery
 COPY . .

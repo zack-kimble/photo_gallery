@@ -2,6 +2,7 @@ from datetime import datetime
 from flask import render_template, flash, redirect, url_for, request,  send_from_directory, session,jsonify
 from flask import current_app as app
 from flask_login import current_user, login_required
+
 from app import db
 from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm, FaceProcessingForm
 from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, PhotoMetadata
@@ -9,7 +10,7 @@ from app.utils import add_jpeg_symlinks, convert_copy_tiffs
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
 
-from app.tasks import identify_faces_task, create_embeddings_task, detect_faces_task
+#from app.tasks import identify_faces_task, create_embeddings_task, detect_faces_task
 
 from werkzeug.http import HTTP_STATUS_CODES
 
@@ -56,6 +57,9 @@ def index():
         upload_directory = app.config['UPLOAD_FOLDER']
         link_directory = os.path.join(upload_directory, 'linked')
         copy_directory = os.path.join(upload_directory, 'jpg_copy')
+        for directory in (link_directory,copy_directory):
+            if not os.path.exists(directory):
+                os.mkdir(directory)
         photo_paths = add_jpeg_symlinks(source_full_path, link_directory)
         photo_paths.extend(convert_copy_tiffs(source_full_path, copy_directory))
         for photo_path in photo_paths:
@@ -203,44 +207,53 @@ def galleria1():
 @bp.route('/detect_faces')
 @login_required
 def detect_faces():
-    flash('Detect faces task started')
-    detect_faces_task(storage_root='app/static/faces')
-    flash("Detect faces task complete")
-    # if current_user.get_task_in_progress('detect_faces_task'):
-    #     flash('Detection task is currently in progress')
-    # else:
-    #     current_user.launch_task('detect_faces_task', 'Detecting Faces...', storage_root='app/static/faces')
-    #     db.session.commit()
-    #     flash('Detection task started')
+    # flash('Detect faces task started')
+    # detect_faces_task(storage_root='app/static/faces')
+    # flash("Detect faces task complete")
+    if current_user.get_task_in_progress('detect_faces_task'):
+        flash('Detection task is currently in progress')
+    else:
+        current_user.launch_task('detect_faces_task', 'Detecting Faces...', storage_root='app/static/faces')
+        db.session.commit()
+        flash('Detection task started')
     return redirect(url_for('main.index'))
 
 @bp.route('/create_embeddings')
 def create_embeddings():
-    flash('Embedding task started')
-    create_embeddings_task()
-    flash("Embedding task complete")
-    # if current_user.get_task_in_progress('create_embeddings_task'):
-    #     flash('Embedding task is currently in progress')
-    # else:
-    #     current_user.launch_task('create_embeddings_task', 'Embedding Faces...')
-    #     db.session.commit()
-    #     flash('Embedding task started')
+    # flash('Embedding task started')
+    # create_embeddings_task()
+    # flash("Embedding task complete")
+    if current_user.get_task_in_progress('create_embeddings_task'):
+        flash('Embedding task is currently in progress')
+    else:
+        current_user.launch_task('create_embeddings_task', 'Embedding Faces...')
+        db.session.commit()
+        flash('Embedding task started')
     return redirect(url_for('main.index'))
 
 
 @bp.route('/identify_faces')
 def identify_faces():
-    flash('Identify faces task started')
-    identify_faces_task()
-    flash("Identify faces task complete")
-    # if current_user.get_task_in_progress('identify_faces_task'):
-    #     flash('Identify faces task is currently in progress')
-    # else:
-    #     current_user.launch_task('identify_faces_task', 'Identify faces...')
-    #     db.session.commit()
-    #     flash('Identify faces task started')
+    # flash('Identify faces task started')
+    # identify_faces_task()
+    # flash("Identify faces task complete")
+    if current_user.get_task_in_progress('identify_faces_task'):
+        flash('Identify faces task is currently in progress')
+    else:
+        current_user.launch_task('identify_faces_task', 'Identify faces...')
+        db.session.commit()
+        flash('Identify faces task started')
     return redirect(url_for('main.index'))
 
+@bp.route('/test_task')
+def test_task():
+    if current_user.get_task_in_progress('test_task'):
+        flash('Test task is currently in progress')
+    else:
+        current_user.launch_task('test_task', 'Testing..')
+        db.session.commit()
+        flash('Test task started')
+    return redirect(url_for('main.index'))
 
 @bp.route('/label_faces')
 @login_required

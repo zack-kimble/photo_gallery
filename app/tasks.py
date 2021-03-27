@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 
 import torch
 from PIL import Image
@@ -18,7 +19,20 @@ import numpy as np
 
 from sklearn.neighbors import RadiusNeighborsClassifier
 
+from time import sleep
 
+class TestConfig(Config):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite://'
+    ELASTICSEARCH_URL = None
+    UPLOAD_FOLDER = 'test_assets/uploads'
+
+if os.environ.get('PYTEST'):
+    app = create_app(TestConfig)
+    app.app_context().push()
+else:
+    app = create_app()
+    app.app_context().push()
 
 print("after context push:"+os.getcwd())
 #def run_search
@@ -218,7 +232,7 @@ def detect_faces_task(storage_root):
         del mtcnn
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())
-        raise ChildProcessError
+        raise ChildProcessError(sys.exc_info())
     finally:
         _set_task_progress(100)
 
@@ -236,24 +250,30 @@ def _set_task_progress(progress):
 
 
 def create_embeddings_task():
-        print("embeddings taask: "+os.getcwd())
-    #try:
+    app.logger.info("embeddings task: "+os.getcwd())
+    try:
         faces_result = PhotoFace.query.filter(~PhotoFace.embedding.any()).all()
-        if len(faces_result) == 0:
+        if (new_face_count := len(faces_result)) == 0:
             app.logger.warn('no new faces found to run embedding on',exc_info = sys.exc_info())
             _set_task_progress(100)
             return
-        face_id_list, face_paths_list = list(zip(*[(face.id, face.location) for face in faces_result]))
-        face_embeddings = get_arcface_embeddings(face_paths_list)
-        for id, embedding in zip(face_id_list, face_embeddings):
-            face_embedding = FaceEmbedding(embedding=embedding, photo_face_id=id)
-            db.session.add(face_embedding)
-        db.session.commit()
-    # except:
-    #     app.logger.error('Unhandled exception', exc_info=sys.exc_info())
-    #     raise ChildProcessError
-    # finally:
-    #     _set_task_progress(100)
+
+        outer_batch_size = 16 * 30
+        for i in range((new_face_count - 1) // outer_batch_size + 1):
+            start_i = i * outer_batch_size
+            end_i = max((start_i + outer_batch_size, new_face_count - 1))
+            faces_result_batch = faces_result[start_i:end_i]
+            face_id_list, face_paths_list = list(zip(*[(face.id, face.location) for face in faces_result_batch]))
+            face_embeddings = get_arcface_embeddings(face_paths_list)
+            for id, embedding in zip(face_id_list, face_embeddings):
+                face_embedding = FaceEmbedding(embedding=embedding, photo_face_id=id)
+                db.session.add(face_embedding)
+            db.session.commit()
+    except:
+        app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+        raise ChildProcessError(sys.exc_info())
+    finally:
+        _set_task_progress(100)
 
 
 def angular_distance(feature0, feature1):
@@ -267,8 +287,10 @@ def angular_distance(feature0, feature1):
 
 
 def identify_faces_task():
-    #try:
-        gallery =  PhotoFace.query.filter(PhotoFace.name_auto.is_(False)& PhotoFace.embedding.any()).all()
+    try:
+        gallery = PhotoFace.query.filter(PhotoFace.name_auto.is_(False)& PhotoFace.embedding.any()).all()
+        if len(gallery) == 0:
+            raise ValueError('no faces have been labeled, so no new faces can be identified')
         X, y = zip(*[(photo_face.embedding[0].embedding, photo_face.name) for photo_face in gallery])
         #TODO convert names to ints and map then map back after
         y = np.array(y).astype('<U20') #hack because RadiusNeighborsClassifier converts y levels to np.array and then compares dtypes. If the outlier label is longer than any name it will fail.
@@ -283,23 +305,20 @@ def identify_faces_task():
             photo_face = PhotoFace.query.get(id)
             photo_face.from_dict({'name': name, 'name_auto': True})
         db.session.commit()
-    # except:
-    #     app.logger.error('Unhandled exception', exc_info=sys.exc_info())
-    #     raise ChildProcessError
-    # finally:
-    #     _set_task_progress(100)
-class TestConfig(Config):
-    TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite://'
-    ELASTICSEARCH_URL = None
-    UPLOAD_FOLDER = 'test_assets/uploads'
+        _set_task_progress(100)
+        return
+    except:
+        app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+        raise ChildProcessError(sys.exc_info())
+    finally:
+        _set_task_progress(100)
+
+def test_task():
+    sleep(10)
+    app.logger.info('task done')
+    _set_task_progress(100)
+    return
 
 
 
-if __name__ == '__main__':
-    if os.environ.get('PYTEST'):
-        app = create_app(TestConfig)
-        app.app_context().push()
-    else:
-        app = create_app()
-        app.app_context().push()
+

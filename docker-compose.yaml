@@ -1,11 +1,13 @@
 version: "3.8"
 services:
   photo-gallery-server:
+    image: zkimble/photo_gallery
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - 5000:5000
+      - 9181:9181
     volumes:
       - ~/photo_gallery/uploads:/photo_gallery/uploads
       - ~/photo_gallery/database:/photo_gallery/database
@@ -21,3 +23,4 @@ services:
     tty: true
     environment:
       - PHOTO_SOURCE=/media/zack/WD 4TB/My Pictures
+      - UPLOAD_FOLDER=/photo_gallery/uploads
