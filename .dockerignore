@@ -47,3 +47,5 @@ __pycache__/
 
 Dockerfile*
 .dockerignore
+run_photo_gallery.command
+docker-compose.yaml
