@@ -105,7 +105,7 @@ def init_mtcnn():
 def mtcnn_detect_faces(images, mtcnn):
 
     batch_size = 16
-    workers = 0 if os.name == 'nt' else 8
+    workers = 0 if os.name == 'nt' else os.cpu_count()
 
     img_ds = ImagePathsDataset(images, loader=exif_rotate_pil_loader, transform=transforms.Resize((1024, 1024)))
 

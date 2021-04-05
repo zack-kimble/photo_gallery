@@ -84,6 +84,8 @@ def test_PhotoDirectoryForm(testapp, init_database):
     Photo.query.delete()
     db.session.commit()
 
+    #todo: test skipping existing tiffs
+
 @pytest.fixture(scope='module')
 def create_test_search(testapp, init_database):
     rv = testapp.get('/')

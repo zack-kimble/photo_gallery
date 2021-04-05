@@ -23,6 +23,8 @@ def add_jpeg_symlinks(source_directory, target_directory):
 
     return sym_paths
 
+#TODO this function is way too messy. As coded if something fails between saving the file and registering, then subsequent runs will skip those photos, adn they can't be added to the db. To prevent this requires a list of all files in the db, which could be huge and just doesn't belong here\
+# Frankly this just needs to be moved out of routes and done from command line
 def convert_copy_tiffs(source_directory, target_directory):
     pathlib.Path(target_directory).mkdir(exist_ok=True)
     last_common_dir = os.path.basename(source_directory)
@@ -39,13 +41,19 @@ def convert_copy_tiffs(source_directory, target_directory):
     except shutil.Error as e:
         Warning(f'copytree completed, but ran into some errors:{e}')
     target_paths = [os.path.splitext(path)[0].replace(source_directory, last_common_dir)+'.JPG' for path in files]
-    for file, target in zip(files, target_paths):
-        save_path = os.path.join(target_directory, target)
-        im = Image.open(file)
-        out = im.convert("RGB")
-        out.save(save_path, "JPEG", quality=95)
-
-    db_locations = [os.path.join(new_root,path) for path in target_paths]
+    #db_locations = [os.path.join(new_root, path) for path in target_paths]
+    db_locations = []
+    for i, (file, target) in enumerate(zip(files, target_paths)):
+        try:
+            save_path = os.path.join(target_directory, target)
+            if os.path.exists(save_path):
+                continue
+            im = Image.open(file)
+            out = im.convert("RGB")
+            out.save(save_path, "JPEG", quality=95)
+            db_locations.append(os.path.join(new_root, target))
+        except Exception as e:
+            warnings.warn(f'could not convert {file} to jpg. Error: {e}')
     return db_locations
 
 def get_keywords_from_path(photo_path):
