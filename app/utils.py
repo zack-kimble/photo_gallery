@@ -3,7 +3,7 @@ import glob, os, warnings, shutil, pathlib
 from PIL import Image
 
 def ignore(dir, files):
-    return [f for f in files if os.path.isfile(os.path.join(dir, f)) or not os.access(os.path.join(dir, f), os.R_OK)]
+    return [f for f in files if os.path.isfile(os.path.join(dir, f))] #  or not os.access(os.path.join(dir, f), os.R_OK)
 
 #Todo: honestly just need to diagram both these functions and probably completely rebuild using os.walk and indexes
 def add_jpeg_symlinks(source_directory, target_directory):
@@ -47,6 +47,8 @@ def convert_copy_tiffs(source_directory, target_directory):
         try:
             save_path = os.path.join(target_directory, target)
             if os.path.exists(save_path):
+                #will attempt to add new photo to db even if jpg copy already exists. DB may get reset, and if the db entry already exists, the new one will just get rejected.
+                db_locations.append(os.path.join(new_root, target))
                 continue
             im = Image.open(file)
             out = im.convert("RGB")

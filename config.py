@@ -11,7 +11,7 @@ class Config(object):
     POSTS_PER_PAGE = 25
     ELASTICSEARCH_URL = os.environ.get('ELASTICSEARCH_URL')
     #TODO Need better way to handle this. RQ doesn't get env from .flaskenv, so probably need to control env elsewhere
-    UPLOAD_FOLDER =os.environ.get('UPLOAD_FOLDER')
+    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or '../uploads' #'/photo_gallery/uploads'
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://'
-    PHOTO_SOURCE = os.environ.get('PHOTO_SOURCE')
+    #PHOTO_SOURCE = os.environ.get('PHOTO_SOURCE')
     #SQLALCHEMY_ECHO = True

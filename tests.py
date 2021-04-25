@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from datetime import datetime, timedelta
 import unittest, pytest, tempfile, os, glob, shutil
+os.environ["PYTEST"] = 'true'
+
 from app import create_app, db
 from app.models import User, Photo, PhotoFace, Task, SavedSearch, SearchResults
 from config import Config
@@ -23,6 +25,7 @@ class TestConfig(Config):
     PASSWORD = 'test'
     #LOGIN_DISABLED = True
     WTF_CSRF_ENABLED = False
+
 
 
 @pytest.fixture(scope='module')
@@ -48,9 +51,13 @@ def runner(app):
     return app.test_cli_runner()
 
 @pytest.fixture(scope='module')
-def testapp(app):
+def testapp(app, init_database):
     """Create Webtest app."""
-    return TestApp(app)
+    testapp = TestApp(app)
+    #testapp = TestApp(app, extra_environ=dict(REMOTE_USE='test'))
+    # testapp.set_authorization(('Basic', (app.config['USERNAME'],app.config['PASSWORD'])))
+    # testapp.get_authorization()
+    return testapp
 
 
 @pytest.fixture(scope='module')
@@ -69,9 +76,10 @@ def init_database(app):
     db.drop_all()
 
 #@pytest.fixture(scope='module')
-def test_PhotoDirectoryForm(testapp, init_database):
+def test_PhotoDirectoryForm(testapp, init_database, login):
+    #testapp.get_authorization()
     rv = testapp.get('/')
-    form = rv.forms[0] #can't figure out where to name the form so it shows up here
+    form = rv.forms['photo_directory_form'] #can't figure out where to name the form so it shows up here.
     form['path'] = '/home/zack/PycharmProjects/photo_gallery/test_assets/client_files'
     result = form.submit(name='submit')
     assert Photo.query.count() == 246
@@ -129,7 +137,7 @@ def test_detect_faces_route(testapp, client, init_database, login):
 #these tests need to be executed in a particular order.  Right now pytest-order would work, but I went with chaining them as fixtures so the dependencies would be explicit if things become less linear.
 @pytest.fixture(scope='module')
 def test_detect_faces_task(app, init_database, populate_test_photos):
-    detect_faces_task(storage_root='test_assets/faces')
+    detect_faces_task(storage_root='test_assets/faces', outer_batch_size=2)
     assert PhotoFace.query.count() == 5
 
 @pytest.fixture(scope='module')
@@ -149,7 +157,7 @@ def test_create_embeddings_route(testapp, login, init_database, test_detect_face
 @pytest.fixture(scope='module')
 def test_create_embeddings_task(client, init_database, populate_test_photos, test_detect_faces_task):
     create_embeddings_task()
-    assert PhotoFace.query.first().embedding is not None
+    assert len(PhotoFace.query.first().embedding) > 0
 
 @pytest.fixture(scope='module')
 def test_identify_faces_task(client, init_database, populate_test_photos, test_create_embeddings_task, test_photo_face):
@@ -179,6 +187,7 @@ def test_search_execution(testapp, create_test_search,test_identify_faces_task):
 def test_get_search_results(testapp, test_search_execution):
     rv = testapp.get('/search/1/results?start=1&stop=2&get_range=true')
 
-def test_ignore_function():
-    shutil.copytree('test_assets/copytree_test', 'test_assets/copytree_test_output', ignore=ignore, dirs_exist_ok=True)
-    assert len(os.listdir('test_assets/copytree_test_output'))==1
+# couldn't find a way to check for access .Trashes properly in the ignore function. Just try/except copytree now, so this test doesn't matter anymore
+# def test_ignore_function():
+#     shutil.copytree('test_assets/copytree_test', 'test_assets/copytree_test_output', ignore=ignore, dirs_exist_ok=True)
+#     assert len(os.listdir('test_assets/copytree_test_output'))==1

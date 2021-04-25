@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.main.forms import PhotoDirectoryForm, CreateSearchForm, LoadSearchForm, FaceProcessingForm
-from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, PhotoMetadata
+from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, PhotoMetadata, Task
 from app.utils import add_jpeg_symlinks, convert_copy_tiffs
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
@@ -33,6 +33,7 @@ def manage():
 
 @bp.route('/', methods=['GET', 'POST'])
 @bp.route('/index', methods=['GET', 'POST'])
+@login_required
 def index():
 
     path_form = PhotoDirectoryForm()
@@ -123,7 +124,16 @@ def index():
         elif face_processing_form.identify.data:
             return redirect(url_for('main.identify_faces'))
 
-    return render_template('index.html', path_form=path_form, create_search_form=create_search_form, load_search_form=load_search_form, face_processing_form= face_processing_form)
+    page = request.args.get('page', 1, type=int)
+    tasks = current_user.tasks.order_by(Task.date_created.desc()).paginate(1, 10, False)
+    next_url = url_for('main.index', page=tasks.next_num) \
+        if tasks.has_next else None
+    prev_url = url_for('main.index', page=tasks.prev_num) \
+        if tasks.has_prev else None
+
+    return render_template('index.html', path_form=path_form, create_search_form=create_search_form,
+                           load_search_form=load_search_form, face_processing_form=face_processing_form, tasks=tasks.items,
+                           next_url=next_url, prev_url=prev_url)
 
 def parse_values(input):
     input = input.replace(', ', ' and ')

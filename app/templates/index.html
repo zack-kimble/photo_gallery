@@ -1,11 +1,22 @@
 {% extends "base.html" %}
 {% import 'bootstrap/wtf.html' as wtf %}
 
+{% block styles %}
+{{ super() }}
+<style>
+table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+    padding: 10px;
+}
+</style>
+{%  endblock %}
+
 {% block app_content %}
     <h1>Hi, {{ current_user.username }}!</h1>
     <h2>Add photos</h2>
     {% if path_form %}
-    {{ wtf.quick_form(path_form) }}
+    {{ wtf.quick_form(path_form, id='photo_directory_form') }}
     <br>
     {% endif %}
     <hr>
@@ -25,5 +36,32 @@
         {{ wtf.quick_form(load_search_form) }}
     <br>
     {% endif %}
-
+    <hr>
+    <h2>Tasks</h2>
+    <table>
+    <thead><tr><th>Task</th><th>Time created</th><th>Progress</th><th>Metadata</th></tr></thead>
+    <tbody>
+        {% for task in tasks %}
+            <tr><td>{{ task.description }}  </td><td>{{ moment(task.date_created).format('LLL') }}</td><td>{{ task.progress|round}}</td>
+                <td>
+                    {% for k, v in task.meta.items() %}
+                        {{ k }} : {{ v }}
+                    {% endfor %}
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+    </table>
+     <ul class="pager">
+            <li class="previous{% if not prev_url %} disabled{% endif %}">
+                <a href="{{ prev_url or '#' }}">
+                    <span aria-hidden="true">&larr;</span> Newer tasks
+                </a>
+            </li>
+            <li class="next{% if not next_url %} disabled{% endif %}">
+                <a href="{{ next_url or '#' }}">
+                    Older tasks <span aria-hidden="true">&rarr;</span>
+                </a>
+            </li>
+     </ul>
 {% endblock %}

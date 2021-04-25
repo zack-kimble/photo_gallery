@@ -22,5 +22,5 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - PHOTO_SOURCE=/media/zack/WD 4TB/My Pictures
+      #- PHOTO_SOURCE=/media/zack/WD 4TB/My Pictures
       - UPLOAD_FOLDER=/photo_gallery/uploads

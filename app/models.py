@@ -62,7 +62,7 @@ class User(UserMixin, db.Model):
         rq_job = current_app.task_queue.enqueue('app.tasks.' + name,
                                                 *args, **kwargs)
         task = Task(id=rq_job.get_id(), name=name, description=description,
-                    user=self)
+                    user=self,meta={'awaiting_metadata': True})
         db.session.add(task)
         return task
 
@@ -176,8 +176,10 @@ class Task(db.Model):
     name = db.Column(db.String(128), index=True)
     description = db.Column(db.String(128))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    progress = db.Column(db.NUMERIC)
+    progress = db.Column(db.NUMERIC, default=0)
     complete = db.Column(db.Boolean, default=False)
+    meta = db.Column(db.JSON)
+    date_created = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
     def get_rq_job(self):
         try:

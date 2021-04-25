@@ -1,6 +1,7 @@
 import os
 import sys
 import warnings
+import traceback
 
 import torch
 from PIL import Image
@@ -178,25 +179,28 @@ def store_face(face, save_path):
     save_img(face, save_path)
 
 
-def detect_faces_task(storage_root):
+def detect_faces_task(storage_root, outer_batch_size=480):
     # TODO Not sure about the try/except wrapping here.
     app.logger.info(f"saving photos in {storage_root}")
     try:
         # get image data from db
-        photos_result = Photo.query.filter_by(face_detection_run=False).filter(~Photo.photo_faces.any()).all() # replace with query based on something from request. This will also run pictures with no faces everytime I think. Need to think about how to save photos with no faces so they don't get rerun
+        photos_result = Photo.query.filter_by(face_detection_run=False).filter(~Photo.photo_faces.any()).all()
 
         if (new_photo_count := len(photos_result)) == 0:
             app.logger.warn('no new photos found to run detection on', exc_info = sys.exc_info())
-            _set_task_progress(100)
+            job_meta = {'progress': 100, 'warning': 'no new photos found to run detect on'}
+            update_task(job_meta)
             return
 
         app.logger.info(f'detecting faces in {new_photo_count} photos')
 
-        outer_batch_size = 16*30
+        #outer_batch_size = 16*30
+        total_batches = int(np.ceil(new_photo_count/outer_batch_size))
         mtcnn = init_mtcnn()
-        for i in range((new_photo_count - 1) // outer_batch_size + 1):
+        for i in range(total_batches):
+            app.logger.info(f'starting batch {i}')
             start_i = i * outer_batch_size
-            end_i = max((start_i + outer_batch_size, new_photo_count-1))
+            end_i = min((start_i + outer_batch_size, new_photo_count))
             photos_result_batch = photos_result[start_i:end_i]
             photo_id_list, photo_paths_list = list(zip(*[(photo.id, photo.location) for photo in photos_result_batch]))
 
@@ -228,38 +232,54 @@ def detect_faces_task(storage_root):
                         store_face(face, save_path)
                 Photo.query.get(photo_id).face_detection_run = True
             db.session.commit()
-            app.logger.info(f"completed detection on {(i+1)*outer_batch_size} photos")
+            completed_photo_count = min((i+1)*outer_batch_size,new_photo_count)
+            app.logger.info(f"completed detection on {completed_photo_count} photos")
+            job_meta = {'photos_to_be_processed': new_photo_count,
+                        'batch_size': outer_batch_size,
+                        'total_batches': total_batches,
+                        'batches_complete': i+1,
+                        'progress': 100*(completed_photo_count/new_photo_count)}
+            update_task(job_meta)
         del mtcnn
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+        fail_task()
+        traceback.print_exc()
         raise ChildProcessError(sys.exc_info())
-    finally:
-        _set_task_progress(100)
 
 
-def _set_task_progress(progress):
+
+
+def fail_task():
+    job_meta = {'task_failed': True, 'progress': 100}
+    update_task(job_meta)
+
+def update_task(job_meta):
     job = get_current_job()
     if job:
-        job.meta['progress'] = progress
+        for k, v in job_meta.items():
+            job.meta[k] = v
         job.save_meta()
         task = Task.query.get(job.get_id())
-        task.progress = progress
-        if progress >= 100:
+        task.meta = job.meta
+        task.progress = job.meta['progress']
+        if task.progress >= 100:
             task.complete = True
         db.session.commit()
-
 
 def create_embeddings_task():
     app.logger.info("embeddings task: "+os.getcwd())
     try:
         faces_result = PhotoFace.query.filter(~PhotoFace.embedding.any()).all()
         if (new_face_count := len(faces_result)) == 0:
-            app.logger.warn('no new faces found to run embedding on',exc_info = sys.exc_info())
-            _set_task_progress(100)
+            app.logger.warn('no new faces found to run embedding on', exc_info = sys.exc_info())
+            job_meta = {'progress': 100, 'warning': 'no new faces found to run embedding on'}
+            update_task(job_meta)
             return
 
         outer_batch_size = 16 * 30
-        for i in range((new_face_count - 1) // outer_batch_size + 1):
+        total_batches = int(np.ceil(new_face_count/outer_batch_size))
+        for i in range(total_batches):
             start_i = i * outer_batch_size
             end_i = max((start_i + outer_batch_size, new_face_count - 1))
             faces_result_batch = faces_result[start_i:end_i]
@@ -269,11 +289,20 @@ def create_embeddings_task():
                 face_embedding = FaceEmbedding(embedding=embedding, photo_face_id=id)
                 db.session.add(face_embedding)
             db.session.commit()
+            completed_face_count = min((i + 1) * outer_batch_size, new_face_count)
+            app.logger.info(f"completed embedding on {completed_face_count} photos")
+            job_meta = {'photos_to_be_processed': new_face_count,
+                        'batch_size': outer_batch_size,
+                        'total_batches': total_batches,
+                        'batches_complete': i+1,
+                        'progress': 100*(completed_face_count/new_face_count)}
+            update_task(job_meta)
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+        fail_task()
+        traceback.print_exc()
         raise ChildProcessError(sys.exc_info())
-    finally:
-        _set_task_progress(100)
+
 
 
 def angular_distance(feature0, feature1):
@@ -305,18 +334,19 @@ def identify_faces_task():
             photo_face = PhotoFace.query.get(id)
             photo_face.from_dict({'name': name, 'name_auto': True})
         db.session.commit()
-        _set_task_progress(100)
+        job_meta = {'progress': 100}
+        update_task(job_meta)
         return
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())
+        fail_task()
+        traceback.print_exc()
         raise ChildProcessError(sys.exc_info())
-    finally:
-        _set_task_progress(100)
 
 def test_task():
     sleep(10)
     app.logger.info('task done')
-    _set_task_progress(100)
+    fail_task()
     return
 
 
