@@ -9,6 +9,7 @@ from app.models import User, Photo, PhotoFace, SavedSearch, SearchResults, Photo
 from app.utils import add_jpeg_symlinks, convert_copy_tiffs
 from app.main import bp
 from sqlalchemy import and_, or_, not_, text
+from sqlalchemy.orm.attributes import flag_modified
 
 #from app.tasks import identify_faces_task, create_embeddings_task, detect_faces_task
 
@@ -19,6 +20,19 @@ import warnings
 import json
 import boolean
 import random
+
+@bp.before_app_first_request
+def complete_zombie_tasks():
+    print("before_app_first_request function ran")
+    zombie_tasks = Task.query.filter_by(complete=False).all()
+    if len(zombie_tasks) > 0:
+        app.logger.info(f"cleaning up {len(zombie_tasks)} zombie tasks")
+        for task in zombie_tasks:
+            task.complete = True
+            task.meta.update({'Zombie task set to complete on restart': True})
+            task.meta = task.meta
+            flag_modified(task, "meta")
+        db.session.commit()
 
 @bp.route('/manage')
 def manage():

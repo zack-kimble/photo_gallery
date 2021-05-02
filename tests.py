@@ -6,7 +6,7 @@ os.environ["PYTEST"] = 'true'
 from app import create_app, db
 from app.models import User, Photo, PhotoFace, Task, SavedSearch, SearchResults
 from config import Config
-from app.tasks import detect_faces_task, create_embeddings_task, identify_faces_task
+from app.tasks import detect_faces_task, create_embeddings_task, identify_faces_task, recommend_batch_size
 from flask import session, g
 from flask_login import current_user
 from app.main.routes import detect_faces
@@ -156,7 +156,7 @@ def test_create_embeddings_route(testapp, login, init_database, test_detect_face
 
 @pytest.fixture(scope='module')
 def test_create_embeddings_task(client, init_database, populate_test_photos, test_detect_faces_task):
-    create_embeddings_task()
+    create_embeddings_task(outer_batch_size=2)
     assert len(PhotoFace.query.first().embedding) > 0
 
 @pytest.fixture(scope='module')
@@ -191,3 +191,9 @@ def test_get_search_results(testapp, test_search_execution):
 # def test_ignore_function():
 #     shutil.copytree('test_assets/copytree_test', 'test_assets/copytree_test_output', ignore=ignore, dirs_exist_ok=True)
 #     assert len(os.listdir('test_assets/copytree_test_output'))==1
+
+def test_recommend_batch_size():
+    assert recommend_batch_size(1000, 50, .2) >= 120 #based on 8GB gtx 1080. Need to monkeypatch torch.cuda to make consistent
+
+
+#TODO: need a test for clearing zombie tasks

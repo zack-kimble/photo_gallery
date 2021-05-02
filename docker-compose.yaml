@@ -15,12 +15,12 @@ services:
       - ~/photo_gallery/migrations/versions:/photo_gallery/migrations/versions
       - ~/photo_gallery/faces:/photo_gallery/app/static/faces
       - type: bind
-        source: /media/zack/WD 4TB/My Pictures
-        target: /media/zack/WD 4TB/My Pictures
+        source: ${PHOTO_SOURCE_PATH}
+        target: ${PHOTO_SOURCE_PATH}
         read_only: true
     init: true
     stdin_open: true
     tty: true
+    shm_size: '1gb'
     environment:
-      #- PHOTO_SOURCE=/media/zack/WD 4TB/My Pictures
       - UPLOAD_FOLDER=/photo_gallery/uploads

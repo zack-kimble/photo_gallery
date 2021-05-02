@@ -2,6 +2,7 @@ import os
 import sys
 import warnings
 import traceback
+from time import perf_counter
 
 import torch
 from PIL import Image
@@ -87,8 +88,16 @@ def reorient_image(im):
     except (KeyError, AttributeError, TypeError, IndexError):
         return im
 
+def recommend_batch_size(overhead_mb, obs_mb, safety_margin):
+    total_mem_mb = torch.cuda.get_device_properties(0).total_memory/1e6
+    available_mem = total_mem_mb - overhead_mb
+    max_batch_size = available_mem//obs_mb
+    recommended_size = int(np.floor(max_batch_size * (1-safety_margin)))
+    return recommended_size
+
 def init_mtcnn():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    app.logger.info('Running on device: {}'.format(device))
 
     mtcnn = MTCNN(
         image_size=112,
@@ -103,10 +112,10 @@ def init_mtcnn():
     return mtcnn
 
 
-def mtcnn_detect_faces(images, mtcnn):
+def mtcnn_detect_faces(images, mtcnn, batch_size):
 
-    batch_size = 16
     workers = 0 if os.name == 'nt' else os.cpu_count()
+    app.logger.info('Number of workers {}'.format(workers))
 
     img_ds = ImagePathsDataset(images, loader=exif_rotate_pil_loader, transform=transforms.Resize((1024, 1024)))
 
@@ -142,7 +151,8 @@ def get_arcface_embeddings(images):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     app.logger.info('Running on device: {}'.format(device))
     batch_size = 16
-    workers = 0 if os.name == 'nt' else 8
+    workers = 0 if os.name == 'nt' else os.cpu_count()
+    app.logger.info('Number of workers {}'.format(workers))
 
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -179,7 +189,7 @@ def store_face(face, save_path):
     save_img(face, save_path)
 
 
-def detect_faces_task(storage_root, outer_batch_size=480):
+def detect_faces_task(storage_root, outer_batch_size='auto'):
     # TODO Not sure about the try/except wrapping here.
     app.logger.info(f"saving photos in {storage_root}")
     try:
@@ -194,21 +204,27 @@ def detect_faces_task(storage_root, outer_batch_size=480):
 
         app.logger.info(f'detecting faces in {new_photo_count} photos')
 
-        #outer_batch_size = 16*30
-        total_batches = int(np.ceil(new_photo_count/outer_batch_size))
         mtcnn = init_mtcnn()
-        for i in range(total_batches):
-            app.logger.info(f'starting batch {i}')
-            start_i = i * outer_batch_size
-            end_i = min((start_i + outer_batch_size, new_photo_count))
-            photos_result_batch = photos_result[start_i:end_i]
+        if torch.cuda.is_available():
+            rec_batch_size = recommend_batch_size(850, 72, .2) # based on observed model and image tensor gpu memory utilization
+        else:
+            rec_batch_size = 16
+        outer_batch_size = rec_batch_size*10 if outer_batch_size == 'auto' else outer_batch_size
+        total_batches = int(np.ceil(new_photo_count / outer_batch_size))
+        batch_times = []
+        for b in range(total_batches):
+            start = perf_counter()
+            app.logger.info(f'starting batch {b}')
+            start_b = b * outer_batch_size
+            end_b = min((start_b + outer_batch_size, new_photo_count))
+            photos_result_batch = photos_result[start_b:end_b]
             photo_id_list, photo_paths_list = list(zip(*[(photo.id, photo.location) for photo in photos_result_batch]))
 
             # get paths figured out - doing this here instead of in the mtcnn wrapper. Should be fine since the dataloader is sequential
             load_paths_list = [os.path.join(app.config['UPLOAD_FOLDER'], photo_path) for photo_path in photo_paths_list]
             # save_paths_list = [os.path.join(storage_root, photo_path) for photo_path in photo_paths_list]
 
-            paths_list, boxes_list, box_probs_list, faces_list = mtcnn_detect_faces(load_paths_list, mtcnn)
+            paths_list, boxes_list, box_probs_list, faces_list = mtcnn_detect_faces(load_paths_list, mtcnn, rec_batch_size)
             face_meta_list = []
 
             for photo_id, path, boxes, probs, faces in zip(photo_id_list, photo_paths_list, boxes_list, box_probs_list,
@@ -232,13 +248,20 @@ def detect_faces_task(storage_root, outer_batch_size=480):
                         store_face(face, save_path)
                 Photo.query.get(photo_id).face_detection_run = True
             db.session.commit()
-            completed_photo_count = min((i+1)*outer_batch_size,new_photo_count)
+            completed_photo_count = min((b+1)*outer_batch_size,new_photo_count)
+            end = perf_counter()
+            batch_times.append(end-start)
+            mean_batch_time_min = np.mean(batch_times) / 60
             app.logger.info(f"completed detection on {completed_photo_count} photos")
             job_meta = {'photos_to_be_processed': new_photo_count,
                         'batch_size': outer_batch_size,
                         'total_batches': total_batches,
-                        'batches_complete': i+1,
-                        'progress': 100*(completed_photo_count/new_photo_count)}
+                        'batches_complete': b+1,
+                        'progress': 100*(completed_photo_count/new_photo_count),
+                        'mean_batch_time_minutes': mean_batch_time_min,
+                        'eta_minutes': mean_batch_time_min*(total_batches-b+1),
+                        'elapsed_minutes': sum(batch_times)/60,
+                        }
             update_task(job_meta)
         del mtcnn
     except:
@@ -252,13 +275,15 @@ def detect_faces_task(storage_root, outer_batch_size=480):
 
 def fail_task():
     job_meta = {'task_failed': True, 'progress': 100}
+    db.session.rollback()
     update_task(job_meta)
 
 def update_task(job_meta):
     job = get_current_job()
     if job:
-        for k, v in job_meta.items():
-            job.meta[k] = v
+        job.meta.update(job_meta)
+        # for k, v in job_meta.items():
+        #     job.meta[k] = v
         job.save_meta()
         task = Task.query.get(job.get_id())
         task.meta = job.meta
@@ -267,7 +292,7 @@ def update_task(job_meta):
             task.complete = True
         db.session.commit()
 
-def create_embeddings_task():
+def create_embeddings_task(outer_batch_size=480):
     app.logger.info("embeddings task: "+os.getcwd())
     try:
         faces_result = PhotoFace.query.filter(~PhotoFace.embedding.any()).all()
@@ -277,25 +302,33 @@ def create_embeddings_task():
             update_task(job_meta)
             return
 
-        outer_batch_size = 16 * 30
         total_batches = int(np.ceil(new_face_count/outer_batch_size))
-        for i in range(total_batches):
-            start_i = i * outer_batch_size
-            end_i = max((start_i + outer_batch_size, new_face_count - 1))
-            faces_result_batch = faces_result[start_i:end_i]
+        batch_times = []
+        for b in range(total_batches):
+            start = perf_counter()
+            start_b = b * outer_batch_size
+            end_b = min((start_b + outer_batch_size, new_face_count))
+            faces_result_batch = faces_result[start_b:end_b]
             face_id_list, face_paths_list = list(zip(*[(face.id, face.location) for face in faces_result_batch]))
             face_embeddings = get_arcface_embeddings(face_paths_list)
             for id, embedding in zip(face_id_list, face_embeddings):
                 face_embedding = FaceEmbedding(embedding=embedding, photo_face_id=id)
                 db.session.add(face_embedding)
             db.session.commit()
-            completed_face_count = min((i + 1) * outer_batch_size, new_face_count)
-            app.logger.info(f"completed embedding on {completed_face_count} photos")
-            job_meta = {'photos_to_be_processed': new_face_count,
+            end = perf_counter()
+            batch_times.append(end-start)
+            mean_batch_time_min = np.mean(batch_times) / 60
+            completed_face_count =  min((b + 1) * outer_batch_size, new_face_count)
+            app.logger.info(f"completed detection on {completed_face_count} faces")
+            job_meta = {'faces_to_be_processed': new_face_count,
                         'batch_size': outer_batch_size,
                         'total_batches': total_batches,
-                        'batches_complete': i+1,
-                        'progress': 100*(completed_face_count/new_face_count)}
+                        'batches_complete': b+1,
+                        'progress': 100*(completed_face_count/new_face_count),
+                        'mean_batch_time_minutes': mean_batch_time_min,
+                        'eta_minutes': mean_batch_time_min*(total_batches-b+1),
+                        'elapsed_minutes': sum(batch_times)/60,
+                        }
             update_task(job_meta)
     except:
         app.logger.error('Unhandled exception', exc_info=sys.exc_info())

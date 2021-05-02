@@ -45,7 +45,7 @@ table, th, td {
             <tr><td>{{ task.description }}  </td><td>{{ moment(task.date_created).format('LLL') }}</td><td>{{ task.progress|round}}</td>
                 <td>
                     {% for k, v in task.meta.items() %}
-                        {{ k }} : {{ v }}
+                        {{ k }} : {{ v }},
                     {% endfor %}
                 </td>
             </tr>
