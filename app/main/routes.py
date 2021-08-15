@@ -1,3 +1,10 @@
+import os
+import warnings
+import json
+import boolean
+import random
+import re
+
 from datetime import datetime
 from flask import render_template, flash, redirect, url_for, request,  send_from_directory, session,jsonify
 from flask import current_app as app
@@ -15,11 +22,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from werkzeug.http import HTTP_STATUS_CODES
 
-import os
-import warnings
-import json
-import boolean
-import random
+
 
 @bp.before_app_first_request
 def complete_zombie_tasks():
@@ -151,6 +154,7 @@ def index():
 
 def parse_values(input):
     input = input.replace(', ', ' and ')
+    input, _ = re.subn('(?<!and|not| or) (?!and|not|or )', '_', input)
     algebra = boolean.BooleanAlgebra()
     expression = algebra.parse(input).simplify()
     return expression
@@ -162,7 +166,7 @@ def boolean_algebra_to_slqalchemy(expression,  child_object, child_table_column)
     func_for_map = lambda x: boolean_algebra_to_slqalchemy(x, child_object=child_object, child_table_column=child_table_column)
     if isinstance(expression, boolean.boolean.Symbol):
         obj = expression.obj if isinstance(expression.obj, str) else repr(expression.obj)
-        return child_object.any(child_table_column.like(f"%{obj}%"))
+        return child_object.any(child_table_column.like(f"%{obj.replace('_',' ')}%"))
         #return child_object.any(child_table_column == obj)
     else:
         return operator_map[expression.__class__.__name__](*map(func_for_map, expression.args))
@@ -223,10 +227,6 @@ def slideshow():
     search_id = request.args.get('search_id')
     return render_template('slideshow.html', search_id=search_id)
 
-@bp.route('/galleria1')
-@login_required
-def galleria1():
-    return render_template('galleria1.html')
 
 @bp.route('/detect_faces')
 @login_required

@@ -319,7 +319,7 @@ def create_embeddings_task(outer_batch_size=480):
             batch_times.append(end-start)
             mean_batch_time_min = np.mean(batch_times) / 60
             completed_face_count =  min((b + 1) * outer_batch_size, new_face_count)
-            app.logger.info(f"completed detection on {completed_face_count} faces")
+            app.logger.info(f"completed embedding on {completed_face_count} faces")
             job_meta = {'faces_to_be_processed': new_face_count,
                         'batch_size': outer_batch_size,
                         'total_batches': total_batches,

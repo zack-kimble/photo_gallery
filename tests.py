@@ -9,7 +9,7 @@ from config import Config
 from app.tasks import detect_faces_task, create_embeddings_task, identify_faces_task, recommend_batch_size
 from flask import session, g
 from flask_login import current_user
-from app.main.routes import detect_faces
+from app.main.routes import detect_faces, parse_values
 import shutil
 from webtest import TestApp
 from app.utils import ignore
@@ -195,5 +195,11 @@ def test_get_search_results(testapp, test_search_execution):
 def test_recommend_batch_size():
     assert recommend_batch_size(1000, 50, .2) >= 120 #based on 8GB gtx 1080. Need to monkeypatch torch.cuda to make consistent
 
+def test_parse_values():
+    test_input = 'Tom Petty and Bilbo Baggins or Katie Perry and not Bob'
+    assert parse_values(test_input).__repr__() == "OR(AND(Symbol('Bilbo_Baggins'), Symbol('Tom_Petty')), AND(NOT(Symbol('Bob')), Symbol('Katie_Perry')))"
+
+    test_input = 'Alice, Bob and Chad'
+    assert parse_values(test_input).__repr__() =="AND(Symbol('Alice'), Symbol('Bob'), Symbol('Chad'))"
 
 #TODO: need a test for clearing zombie tasks

@@ -7,6 +7,7 @@
                     <span aria-hidden="true">&larr;</span> Previous photo
                 </a>
             </li>
+            <li class="page-item"> <a href="{{ url_for('main.index') }}">Home</a></li>
             <li class="next{% if not next_url %} disabled{% endif %}">
                 <a href="{{ next_url or '#' }}">
                     Next photo <span aria-hidden="true">&rarr;</span>
